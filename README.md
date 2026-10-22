@@ -1,12 +1,24 @@
 # Scoop on Linux
 
-A user-scoped Linux package manager in Rust, installed as `scoop`. [`DESIGN.md`](DESIGN.md) is the unchanged locked contract; [`MVP-CHECKLIST.md`](MVP-CHECKLIST.md) records reviewed acceptance.
+A user-scoped Linux package manager in Rust, installed as `scoop`. [`DESIGN.md`](DESIGN.md) describes the locked MVP contract.
 
 ## Linux MVP
 
-All 24 scoped commands are implemented: discovery, verified native package lifecycle, maintenance/recovery, bootstrap/self-update, Scoopfiles and diagnostics. The canonical [`main` bucket](https://github.com/zhzy0077/scoop-linux-pkgs) supplies ten reviewed Linux CLI manifests. [`VERIFICATION.md`](VERIFICATION.md) contains the native validation matrix and reproducible checks; [`COMPATIBILITY-AUDIT.md`](COMPATIBILITY-AUDIT.md) maps requirements to tests.
+All 24 scoped commands are implemented: discovery, verified native package lifecycle, maintenance/recovery, bootstrap/self-update, Scoopfiles and diagnostics. Package manifests are maintained separately in the canonical [`main` bucket](https://github.com/zhzy0077/scoop-linux-pkgs).
 
-Build with `cargo build --locked`. Run `scoop help` or `scoop <command> --help` for syntax and options. All project verification runs inside native Podman containers; see the evidence in the checklist.
+## Build and use
+
+Build with Rust/Cargo and Git installed:
+
+```sh
+cargo build --release --locked
+./target/release/scoop help
+./target/release/scoop bucket add main
+./target/release/scoop install main/jq
+~/scoop/bin/jq --version
+```
+
+Run `scoop <command> --help` for syntax and options. Add the selected Scoop root's `bin` directory to PATH for direct command use.
 
 ### Command contract
 
@@ -95,7 +107,7 @@ Fault injection is compiled only with `--features test-hooks`. Tests can select 
 
 ## Bootstrap and self-update
 
-Run a seed executable with `./scoop --bootstrap /absolute/release-catalog.json` (HTTPS and file catalog locations also work). This installer mode preserves the 24-command interface. It downloads and verifies the exact compatible native release, installs `apps/scoop/<version>/scoop`, creates the stable `bin/scoop` symlink, initializes the configured Linux main bucket, saves the catalog/main-bucket configuration and prints the absolute PATH directory.
+Run the built executable with `./target/release/scoop --bootstrap /absolute/release-catalog.json` (HTTPS and file catalog locations also work). This installer mode preserves the 24-command interface. It downloads and verifies the exact compatible native release, installs `apps/scoop/<version>/scoop`, creates the stable `bin/scoop` symlink, initializes the configured Linux main bucket, saves the catalog/main-bucket configuration and prints the absolute PATH directory.
 
 [`release-catalog.schema.json`](release-catalog.schema.json) defines the versioned catalog. Entries are indexed by the compiler's exact Rust target triple and include canonical architecture, Linux OS, libc, ABI, minimum libc and SHA-256. Remote catalogs and release artifacts require HTTPS; local catalogs may use local absolute artifact paths or `file://` URLs. The same policy applies to environment/config-selected catalogs, and HTTPS redirects never downgrade to HTTP. The current build target is embedded at compile time. GNU targets check the running glibc version; static musl entries identify their ABI explicitly. Unsupported targets, incompatible CPU/libc/ABI, invalid checksums and mismatched executable versions fail before activation.
 
@@ -116,7 +128,7 @@ A local catalog example (replace all local paths and the checksum with real rele
 }
 ```
 
-`release_catalog` or `SCOOP_RELEASE_CATALOG` selects update metadata; `SCOOP_INTERNAL_REFRESH_CONTINUE` is the process-handoff marker used to finish bucket refresh under the updated executable. Bootstrap selects its main source from `SCOOP_MAIN_BUCKET`, config `main_bucket_url`, catalog `main_bucket_url`, then the canonical registry default. A catalog can omit `main_bucket_url` to use that default. Bootstrap persists the selected source in config `main_bucket_url`; `scoop config rm main_bucket_url` removes that override. Self-update stages and verifies the ELF executable and its declared version, journals activation, then continues the original command under the updated executable. Bucket refresh and `last_update` completion occur in that updated process. Old Scoop releases remain until explicit cleanup. Hosted release artifact/catalog locations are separate release configuration. The checked-in `main/` payload forms the dedicated `scoop-linux-pkgs` repository; packaging tools also support independent local verification.
+`release_catalog` or `SCOOP_RELEASE_CATALOG` selects update metadata; `SCOOP_INTERNAL_REFRESH_CONTINUE` is the process-handoff marker used to finish bucket refresh under the updated executable. Bootstrap selects its main source from `SCOOP_MAIN_BUCKET`, config `main_bucket_url`, catalog `main_bucket_url`, then the canonical registry default. A catalog can omit `main_bucket_url` to use that default. Bootstrap persists the selected source in config `main_bucket_url`; `scoop config rm main_bucket_url` removes that override. Self-update stages and verifies the ELF executable and its declared version, journals activation, then continues the original command under the updated executable. Bucket refresh and `last_update` completion occur in that updated process. Old Scoop releases remain until explicit cleanup. Hosted release artifact/catalog locations are separate release configuration. The main bucket is maintained in the separate `scoop-linux-pkgs` repository.
 
 Tests use actual temporary Git histories, files, HTTP servers, malicious ZIP/tar fixtures and subprocess CLI invocation. Inside the native build container, `sh tests/build-distribution.sh /workspace/target/fedora` records exact Cargo test artifacts with test hooks enabled and builds an independent version-changed Rust release under `real-release2/`, reusing native compiled dependencies. Its HTTPS/multi-target/hold/concurrent/crash tests run in the distribution gate; they verify the actual updated Rust executable is the ancestor performing bucket refresh. Build the production release afterward with `cargo build --release --locked`, since the secondary build shares the builder's release output directory. `sh tests/run-distribution.sh /workspace/target/fedora` runs those integration artifacts and Bash/Zsh/Fish CLI checks in each compatible native Linux container; the lifecycle suites execute package wrappers and native ELF packages through each shell, check I/O/signals, and verify external XDG data survives actual uninstall.
 
@@ -128,38 +140,21 @@ Tests use actual temporary Git histories, files, HTTP servers, malicious ZIP/tar
 
 `checkup` checks Git, the absolute bin directory in PATH, root/cache/config write access, managed directories, current/retained installation records, executable permissions and links. It prints each issue and fails when repair is required. `reset app` repairs managed executable links. `home app` passes its HTTP(S) homepage as one argument to `xdg-open` and reports launcher failures.
 
-## Packaging a release
+## Development tests
 
-Build once on each native CPU in Podman, then execute those same bytes on both compatible distributions. Packaging derives the glibc symbol floor and required system libraries with readelf, validates target ELF headers, release URLs and the Git main source, and rejects a supplied libc floor that differs from the ELF. A package artifact URL serves the **raw executable**; packaging additionally emits a deterministic tar.gz and SHA256SUMS. Local catalogs are labelled `LOCAL VERIFICATION METADATA` in their generated README and use explicit local paths; they are not publication metadata.
-
-```sh
-# Inside each native builder:
-cargo build --release --locked
-readelf --version-info target/release/scoop
-# With actual artifact locations and a real/local Git main bucket:
-python3 scripts/package-release.py --version 0.1.0 \
-  --main-bucket /absolute/linux-main --output /absolute/releases \
-  --artifact x86_64-unknown-linux-gnu /absolute/x86/scoop auto file:///absolute/releases/scoop-0.1.0-x86_64-unknown-linux-gnu \
-  --artifact aarch64-unknown-linux-gnu /absolute/arm/scoop auto file:///absolute/releases/scoop-0.1.0-aarch64-unknown-linux-gnu
-(cd /absolute/releases && sha256sum -c SHA256SUMS)
-# Supply the checksum for the native target's raw binary from trusted release metadata:
-sh scripts/bootstrap.sh /absolute/releases/release-catalog.json file:///absolute/releases/scoop-0.1.0-x86_64-unknown-linux-gnu NATIVE_BINARY_SHA256
-```
-
-The bootstrap script requires Git, curl, CA certificates, POSIX sh/coreutils (including sha256sum, od and tr), and the native GNU runtime below. It verifies the trusted seed SHA, requires the catalog's native SHA to match it, and installs those seed bytes through the shared verification service. `SCOOP_BOOTSTRAP_SHA256` is its internal trust-binding parameter. A downloaded script and checksum must come from a trusted release channel. Direct seed mode (`scoop --bootstrap CATALOG`) uses the explicitly selected HTTPS/local catalog as its trust source.
-
-Run the complete native real-package gate in an isolated new work directory:
+Run development checks in a native Podman container with Rust/Cargo and the test tools below:
 
 ```sh
-python3 tests/release-lifecycle.py target/release/scoop x86_64-unknown-linux-gnu target/release-gate
-# On arm64, use aarch64-unknown-linux-gnu; reuse that native binary on Ubuntu.
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets --all-features -- -D warnings
 ```
 
-The canonical main-bucket URL is configured independently of release artifact/catalog hosting. Local catalogs and explicit Git sources exercise packaging/bootstrap/self-update without publishing release binaries. To publish the main bucket, use the contents of `main/` as the dedicated repository root; see [`main/README.md`](main/README.md).
+The remaining suites cover CLI/configuration, synthetic Git/HTTP fixtures, manifests, archive/download security, package lifecycle, journals, concurrency, diagnostics and runtime self-update. Distribution test helpers are under `tests/`; package-bucket maintenance is separate from this source repository.
 
 ### Native verification tools
 
-The broad distribution integration suites additionally require the **OpenSSL CLI** for generating the private HTTPS fixture certificate, Python 3 for its TLS server/runner, Git, a native C compiler for the retained ELF-front-end fixtures, Bash/Zsh/Fish and `cmp` (diffutils). These are test-image tools; the Scoop/bootstrap runtime prerequisites are listed separately below. OpenSSL libraries alone do not provide the `openssl` command.
+The broad distribution integration suites additionally require the **OpenSSL CLI** for generating the private HTTPS fixture certificate, Python 3 for its TLS server/runner, Git, a native C compiler for the retained ELF-front-end fixtures, Bash/Zsh/Fish and `cmp` (diffutils). These are test-image tools; the Scoop runtime prerequisites are listed separately below. OpenSSL libraries alone do not provide the `openssl` command.
 
 ```sh
 # Fedora native test image:
@@ -173,6 +168,6 @@ Native builders also need Cargo/Rust with rustfmt and Clippy. `tests/run-distrib
 
 ### Validated GNU runtime matrix
 
-Supported validation targets are native x86-64 and arm64 on Fedora 45 and Ubuntu 26.04.1 LTS. X86-64 also runs on the Fedora 43 builder. Each native binary is reused unchanged on its other distributions. Release requirements are the catalog's computed glibc floor (currently 2.39), `libc.so.6`, `libm.so.6`, the native GNU ELF loader, and `libgcc_s.so.1`. liblzma is statically linked. Fedora supplies these through `glibc`/`libgcc`; Ubuntu through `libc6`/`libgcc-s1`. Clean-runtime bootstrap checks install only Git, curl, CA certificates and these baseline system/coreutils packages, with no compiler or Python required. `xdg-open` is additionally required for `home`.
+Supported validation targets are native x86-64 and arm64 on Fedora 45 and Ubuntu 26.04.1 LTS. X86-64 also runs on the Fedora 43 builder. Each native binary is reused unchanged on its other distributions. Runtime requirements are the catalog's declared glibc floor (2.39 for the reference builds), `libc.so.6`, `libm.so.6`, the native GNU ELF loader, and `libgcc_s.so.1`. liblzma is statically linked. Fedora supplies these through `glibc`/`libgcc`; Ubuntu through `libc6`/`libgcc-s1`. The built-in bootstrap requires Git and a compatible native runtime; it uses the selected HTTPS/local catalog as its trust source. `xdg-open` is additionally required for `home`.
 
 `export -c` includes user configuration such as proxy credentials or tokens, matching the reference's explicit config export. Store the output as a private file and review it before sharing.

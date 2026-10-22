@@ -6,12 +6,15 @@ build=${1:-/workspace/target/fedora}
 export SCOOP_REAL_RELEASE2="$build/real-release2/scoop"
 export SCOOP_DISTRIBUTION_GATE=1
 test -x "$SCOOP_REAL_RELEASE2"
-python3 - "$build/distribution-artifacts.jsonl" <<'PY'
-import json, subprocess, sys
+python3 - "$build/distribution-artifacts.jsonl" "$(dirname "$0")" <<'PY'
+import json, pathlib, subprocess, sys
+live_targets = {path.stem for path in pathlib.Path(sys.argv[2]).glob('*.rs')}
 artifacts = [json.loads(line) for line in open(sys.argv[1])]
 suites = {entry['target']['name']: entry for entry in artifacts
           if entry.get('reason') == 'compiler-artifact' and 'test' in entry['target']['kind']
-          and entry['profile']['test'] and entry.get('executable')}
+          and entry['profile']['test'] and entry.get('executable')
+          and entry['target']['name'] in live_targets}
+assert set(suites) == live_targets, 'Run tests/build-distribution.sh for the current test targets'
 assert suites and 'recovery' in suites, 'Run tests/build-distribution.sh first'
 assert 'test-hooks' in suites['recovery']['features'], 'Recovery requires the test-hooks build'
 for name, artifact in sorted(suites.items()):
