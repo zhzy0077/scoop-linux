@@ -1,0 +1,19 @@
+{
+    "version": "10.2.0",
+    "description": "fd: portable upstream Linux CLI release",
+    "homepage": "https://github.com/sharkdp/fd",
+    "license": "MIT|Apache-2.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-gnu.tar.gz",
+            "hash": "5f9030bcb0e1d03818521ed2e3d74fdb046480a45a4418ccff4f070241b4ed25",
+            "extract_dir": "fd-v10.2.0-x86_64-unknown-linux-gnu"
+        },
+        "arm64": {
+            "url": "https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-aarch64-unknown-linux-gnu.tar.gz",
+            "hash": "6de8be7a3d8ca27954a6d1e22bc327af4cf6fc7622791e68b820197f915c422b",
+            "extract_dir": "fd-v10.2.0-aarch64-unknown-linux-gnu"
+        }
+    },
+    "bin": "fd"
+}

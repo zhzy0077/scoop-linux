@@ -1,0 +1,253 @@
+{
+  "$id": "https://scoop-linux.local/schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "hashPattern": {
+      "pattern": "^([a-fA-F0-9]{64}|sha256:[a-fA-F0-9]{64})$",
+      "type": "string"
+    },
+    "hash": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/hashPattern"
+        },
+        {
+          "items": {
+            "$ref": "#/definitions/hashPattern"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      ]
+    },
+    "architecture": {
+      "additionalProperties": false,
+      "properties": {
+        "bin": {
+          "$ref": "#/definitions/relativePaths"
+        },
+        "checkver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        },
+        "extract_dir": {
+          "$ref": "#/definitions/relativePaths"
+        },
+        "hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "url": {
+          "$ref": "#/definitions/uriOrArrayOfUris"
+        }
+      },
+      "type": "object"
+    },
+    "stringOrArrayOfStrings": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ]
+    },
+    "uriOrArrayOfUris": {
+      "anyOf": [
+        {
+          "format": "uri",
+          "not": {
+            "pattern": "(\\$)"
+          },
+          "type": "string"
+        },
+        {
+          "items": {
+            "format": "uri",
+            "not": {
+              "pattern": "(\\$)"
+            },
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      ]
+    },
+    "licenseIdentifiers": {
+      "type": "string",
+      "description": "License identifier based on SPDX License List https://spdx.org/licenses/",
+      "examples": [
+        "Apache-2.0",
+        "BSD-3-Clause",
+        "Freeware",
+        "GPL-2.0-only",
+        "GPL-2.0-or-later",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+        "ISC",
+        "LGPL-2.0-only",
+        "LGPL-2.0-or-later",
+        "LGPL-2.1-only",
+        "LGPL-2.1-or-later",
+        "LGPL-3.0-only",
+        "LGPL-3.0-or-later",
+        "MIT",
+        "MS-PL",
+        "Proprietary",
+        "Public Domain",
+        "Shareware",
+        "Unlicense"
+      ]
+    },
+    "license": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/licenseIdentifiers"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "url": {
+              "format": "uri",
+              "type": "string"
+            },
+            "identifier": {
+              "$ref": "#/definitions/licenseIdentifiers"
+            }
+          },
+          "required": [
+            "identifier"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "relativePaths": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\/$)(?![A-Za-z]:)[^\\u0000]+$"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*\\/$)(?![A-Za-z]:)[^\\u0000]+$"
+          }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri"
+    },
+    "_comment": {
+      "description": "Deprecated. Use ## instead.",
+      "$ref": "#/definitions/stringOrArrayOfStrings"
+    },
+    "##": {
+      "description": "A comment.",
+      "$ref": "#/definitions/stringOrArrayOfStrings"
+    },
+    "architecture": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(64bit|32bit|arm64|arm|[a-z][a-z0-9_]*)$"
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/architecture"
+      }
+    },
+    "autoupdate": {
+      "type": "object"
+    },
+    "bin": {
+      "$ref": "#/definitions/relativePaths"
+    },
+    "checkver": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object"
+        }
+      ]
+    },
+    "cookie": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "depends": {
+      "$ref": "#/definitions/stringOrArrayOfStrings"
+    },
+    "description": {
+      "type": "string"
+    },
+    "extract_dir": {
+      "$ref": "#/definitions/relativePaths"
+    },
+    "extract_to": {
+      "$ref": "#/definitions/relativePaths"
+    },
+    "hash": {
+      "$ref": "#/definitions/hash"
+    },
+    "homepage": {
+      "format": "uri",
+      "type": "string"
+    },
+    "license": {
+      "$ref": "#/definitions/license"
+    },
+    "notes": {
+      "$ref": "#/definitions/stringOrArrayOfStrings"
+    },
+    "suggest": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(.*)$": {
+          "$ref": "#/definitions/stringOrArrayOfStrings"
+        }
+      },
+      "type": "object"
+    },
+    "url": {
+      "$ref": "#/definitions/uriOrArrayOfUris"
+    },
+    "version": {
+      "pattern": "^[\\w\\.\\-+_]+$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "homepage",
+    "license"
+  ],
+  "title": "Scoop Linux MVP manifest",
+  "type": "object",
+  "description": "Linux manifests: architecture-less artifacts assert architecture-independent content. Native artifacts require exact architecture entries. bin paths expose exact basenames as symlinks; aliases and arguments are unsupported. checkver/autoupdate are inert authoring metadata."
+}

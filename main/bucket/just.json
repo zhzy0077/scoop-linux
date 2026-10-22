@@ -1,0 +1,17 @@
+{
+    "version": "1.40.0",
+    "description": "just: portable upstream Linux CLI release",
+    "homepage": "https://github.com/casey/just",
+    "license": "CC0-1.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-x86_64-unknown-linux-musl.tar.gz",
+            "hash": "181b91d0ceebe8a57723fb648ed2ce1a44d849438ce2e658339df4f8db5f1263"
+        },
+        "arm64": {
+            "url": "https://github.com/casey/just/releases/download/1.40.0/just-1.40.0-aarch64-unknown-linux-musl.tar.gz",
+            "hash": "d065d0df1a1f99529869fba8a5b3e0a25c1795b9007099b00dfabe29c7c1f7b6"
+        }
+    },
+    "bin": "just"
+}

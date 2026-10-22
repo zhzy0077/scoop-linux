@@ -1,0 +1,17 @@
+{
+    "version": "1.7.1",
+    "description": "jq: portable upstream Linux CLI release",
+    "homepage": "https://github.com/jqlang/jq",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64#/jq",
+            "hash": "5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5"
+        },
+        "arm64": {
+            "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-arm64#/jq",
+            "hash": "4dd2d8a0661df0b22f1bb9a1f9830f06b6f3b8f7d91211a1ef5d7c4f06a8b4a5"
+        }
+    },
+    "bin": "jq"
+}

@@ -1,0 +1,17 @@
+{
+    "version": "0.21.0",
+    "description": "eza: portable upstream Linux CLI release",
+    "homepage": "https://github.com/eza-community/eza",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/eza-community/eza/releases/download/v0.21.0/eza_x86_64-unknown-linux-musl.tar.gz",
+            "hash": "ddb11b0eea687cdea02fe3d8f6aef98bbca41580872be0899e5a34c6031c8406"
+        },
+        "arm64": {
+            "url": "https://github.com/eza-community/eza/releases/download/v0.21.0/eza_aarch64-unknown-linux-gnu.tar.gz",
+            "hash": "b31a125bb27c807f821ed0593c16ee6e67691e134234fe86021cd5f4f0f5deee"
+        }
+    },
+    "bin": "eza"
+}

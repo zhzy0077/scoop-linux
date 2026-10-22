@@ -1,0 +1,18 @@
+{
+  "version": "1.2.3-beta+linux_1",
+  "description": "Portable fixture wrapper and data",
+  "homepage": "https://example.org/portable",
+  "license": { "identifier": "MIT", "url": "https://example.org/license" },
+  "url": ["https://example.org/data.txt", "https://example.org/source#/package.tar.gz", "https://example.org/helper", "https://example.org/more.zip"],
+  "hash": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+  "extract_dir": ["package", "more"],
+  "extract_to": ["lib", "share"],
+  "bin": ["bin/tool.sh", "other/helper"],
+  "notes": ["Active: $dir", "Stored: $original_dir"],
+  "depends": ["base", "tools/other"],
+  "suggest": { "extras": ["extra"] },
+  "cookie": { "name": "value" },
+  "checkver": { "script": "inert authoring metadata" },
+  "autoupdate": { "url": "https://example.org/$version", "pre_install": "inert authoring metadata" },
+  "##": ["Linux architecture-independent wrapper fixture"]
+}
