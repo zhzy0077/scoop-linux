@@ -32,7 +32,6 @@ def package_manifest(version, base, targets):
             for entry in targets.values()
         },
         "bin": "scoop",
-        "notes": "Requires glibc 2.39 or newer and libgcc_s.so.1.",
         "checkver": {"github": base, "regex": r"^(?=(?<tag>.*)$)v?(\d+(?:\.\d+)*)$"},
         "autoupdate": {
             "architecture": {
