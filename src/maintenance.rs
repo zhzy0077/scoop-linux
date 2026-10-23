@@ -304,6 +304,7 @@ pub fn update(config: &Config, options: &Update) -> Result<()> {
                     force: options.force,
                     no_cache: options.no_cache,
                     skip_hash: options.skip_hash_check,
+                    progress: !options.quiet,
                 },
                 name == app && options.force,
                 options.quiet,

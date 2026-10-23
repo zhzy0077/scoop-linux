@@ -329,7 +329,10 @@ pub fn import(config: &Config, location: &str) -> Result<()> {
                         &[operand],
                         &selected,
                         false,
-                        download::Options::default(),
+                        download::Options {
+                            progress: true,
+                            ..Default::default()
+                        },
                     )?;
                     let held = tokens.contains(&"Held package")
                         || field(entry, "Hold").and_then(Value::as_bool) == Some(true);

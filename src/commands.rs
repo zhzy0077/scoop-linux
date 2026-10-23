@@ -164,6 +164,7 @@ pub fn run(command: Command) -> Result<()> {
                     no_cache: options.no_cache,
                     skip_hash: options.skip_hash_check,
                     force: false,
+                    progress: true,
                 },
             )
         }
@@ -183,6 +184,7 @@ pub fn run(command: Command) -> Result<()> {
                     force: options.force,
                     skip_hash: options.skip_hash_check,
                     no_cache: false,
+                    progress: true,
                 },
             )
         }

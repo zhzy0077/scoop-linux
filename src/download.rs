@@ -3,6 +3,7 @@ use crate::{
     manifest::{self, Artifact, Manifest},
 };
 use anyhow::{Context, Result, ensure};
+use indicatif::{ProgressBar, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -78,6 +79,42 @@ pub struct Options {
     pub force: bool,
     pub no_cache: bool,
     pub skip_hash: bool,
+    pub progress: bool,
+}
+const BAR_TEMPLATE: &str =
+    "{msg}: [{bar:24}] {bytes}/{total_bytes} ({percent}%) {bytes_per_sec} ETA {eta}";
+const SPINNER_TEMPLATE: &str = "{msg}: {bytes} ({bytes_per_sec})";
+fn progress_bar(filename: &str, total: Option<u64>, enabled: bool) -> ProgressBar {
+    if !enabled {
+        return ProgressBar::hidden();
+    }
+    let style = match total {
+        Some(_) => ProgressStyle::with_template(BAR_TEMPLATE)
+            .expect("valid progress template")
+            .progress_chars("=>-"),
+        None => ProgressStyle::with_template(SPINNER_TEMPLATE).expect("valid progress template"),
+    };
+    let bar = match total {
+        Some(total) => ProgressBar::new(total),
+        None => ProgressBar::new_spinner(),
+    };
+    bar.with_style(style).with_message(filename.to_owned())
+}
+fn copy_with_progress(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    progress: &ProgressBar,
+) -> Result<()> {
+    let mut buffer = [0; 65536];
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        writer.write_all(&buffer[..count])?;
+        progress.inc(count as u64);
+    }
+    Ok(())
 }
 pub fn fetch(
     config: &Config,
@@ -129,7 +166,11 @@ pub fn fetch(
             let source = url
                 .to_file_path()
                 .map_err(|_| anyhow::anyhow!("invalid file URL"))?;
-            std::io::copy(&mut fs::File::open(source)?, &mut temporary)?;
+            let mut source = fs::File::open(source)?;
+            let total = source.metadata().ok().map(|metadata| metadata.len());
+            let progress = progress_bar(&filename, total, options.progress);
+            copy_with_progress(&mut source, &mut temporary, &progress)?;
+            progress.finish_and_clear();
         }
         "http" | "https" => {
             let client = crate::network::client(300)?;
@@ -151,7 +192,9 @@ pub fn fetch(
                 !response.status().is_redirection(),
                 "download redirect policy refused the redirect"
             );
-            std::io::copy(&mut response, &mut temporary)?;
+            let progress = progress_bar(&filename, response.content_length(), options.progress);
+            copy_with_progress(&mut response, &mut temporary, &progress)?;
+            progress.finish_and_clear();
         }
         scheme => anyhow::bail!("unsupported download scheme: {scheme}"),
     }
@@ -180,5 +223,23 @@ pub fn fetch(
             file,
             _temporary: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BAR_TEMPLATE, SPINNER_TEMPLATE, progress_bar};
+    use indicatif::ProgressStyle;
+
+    #[test]
+    fn progress_templates_parse() {
+        for template in [BAR_TEMPLATE, SPINNER_TEMPLATE] {
+            assert!(ProgressStyle::with_template(template).is_ok(), "{template}");
+        }
+    }
+
+    #[test]
+    fn disabled_progress_is_hidden() {
+        assert!(progress_bar("pkg.zip", Some(1024), false).is_hidden());
     }
 }
