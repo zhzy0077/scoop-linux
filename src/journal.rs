@@ -290,8 +290,8 @@ pub fn activate(
     version: &str,
     stage: Option<&Path>,
     replace: bool,
-    old_bins: &[String],
-    bins: &[String],
+    old_bins: &[manifest::Binary],
+    bins: &[manifest::Binary],
 ) -> Result<()> {
     manifest::name(app)?;
     ensure_clear(config, app)?;
@@ -302,16 +302,13 @@ pub fn activate(
     links::preflight(config, bins)?;
     let mut names = std::collections::BTreeSet::new();
     for bin in old_bins.iter().chain(bins) {
-        names.insert(links::basename(bin)?.to_owned());
+        names.insert(bin.name.clone());
     }
     let mut changes = Vec::new();
     for name in names {
         let path = config.root.join("bin").join(&name);
         let old = fs::read_link(&path).ok();
-        let new = if let Some(bin) = bins
-            .iter()
-            .find(|bin| links::basename(bin).ok() == Some(name.as_str()))
-        {
+        let new = if let Some(bin) = bins.iter().find(|bin| bin.name == name) {
             Some(links::target(app, bin))
         } else if links::owner(&path).ok().flatten().as_deref() == Some(app) {
             None

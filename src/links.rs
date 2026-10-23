@@ -1,12 +1,20 @@
-use crate::{config::Config, manifest, state};
+use crate::{
+    config::Config,
+    manifest::{self, Binary},
+    state,
+};
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
     os::unix::fs::symlink,
     path::{Component, Path, PathBuf},
 };
-pub fn target(app: &str, bin: &str) -> PathBuf {
-    Path::new("../apps").join(app).join("current").join(bin)
+pub fn target(app: &str, bin: &Binary) -> PathBuf {
+    Path::new("../apps")
+        .join(app)
+        .join("current")
+        .join(crate::shims::DIRECTORY)
+        .join(&bin.name)
 }
 pub fn owner(path: &Path) -> Result<Option<String>> {
     let target = match fs::read_link(path) {
@@ -44,17 +52,11 @@ pub fn validate_basename(name: &str) -> Result<()> {
     );
     Ok(())
 }
-pub fn basename(bin: &str) -> Result<&str> {
-    Path::new(bin)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .context("invalid binary basename")
-}
-pub fn preflight(config: &Config, bins: &[String]) -> Result<()> {
+pub fn preflight(config: &Config, bins: &[Binary]) -> Result<()> {
     let dir = config.root.join("bin");
     state::managed_dir(&dir)?;
     for bin in bins {
-        let path = dir.join(basename(bin)?);
+        let path = dir.join(&bin.name);
         if fs::symlink_metadata(&path).is_ok() {
             let app = owner(&path)?.context("unmanaged executable conflict")?;
             crate::journal::ensure_clear(config, &app)?;
@@ -75,26 +77,26 @@ pub fn atomic_symlink(target: &Path, path: &Path) -> Result<()> {
     fs::rename(link, path)?;
     Ok(())
 }
-pub fn reconcile(config: &Config, app: &str, old: &[String], bins: &[String]) -> Result<()> {
+pub fn reconcile(config: &Config, app: &str, old: &[Binary], bins: &[Binary]) -> Result<()> {
     preflight(config, bins)?;
     for bin in bins {
-        let path = config.root.join("bin").join(basename(bin)?);
+        let path = config.root.join("bin").join(&bin.name);
         if fs::symlink_metadata(&path).is_ok() {
             let previous = owner(&path)?.context("unmanaged executable")?;
             if previous != app {
-                println!("Replacing '{}' from {previous} with {app}.", basename(bin)?);
+                println!("Replacing '{}' from {previous} with {app}.", bin.name);
             }
         }
         atomic_symlink(&target(app, bin), &path)?;
     }
     for bin in old {
-        if !bins.iter().any(|b| basename(b).ok() == basename(bin).ok()) {
+        if !bins.iter().any(|b| b.name == bin.name) {
             remove_owned(config, app, bin)?;
         }
     }
     Ok(())
 }
-pub fn remove_owned(config: &Config, app: &str, bin: &str) -> Result<()> {
+pub fn remove_owned(config: &Config, app: &str, bin: &Binary) -> Result<()> {
     crate::journal::ensure_clear(config, app)?;
     let dir = config.root.join("bin");
     if fs::symlink_metadata(&dir).is_ok() {
@@ -103,7 +105,7 @@ pub fn remove_owned(config: &Config, app: &str, bin: &str) -> Result<()> {
             "bin is not a managed directory"
         );
     }
-    let path = config.root.join("bin").join(basename(bin)?);
+    let path = config.root.join("bin").join(&bin.name);
     if fs::symlink_metadata(&path).is_ok() && owner(&path).ok().flatten().as_deref() == Some(app) {
         fs::remove_file(path)?;
     }

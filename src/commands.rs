@@ -2,7 +2,7 @@ use crate::{
     buckets::Buckets,
     cli::{Cli, Command},
     config::Config,
-    manifest::{Manifest, strings},
+    manifest::Manifest,
     platform,
     resolve::Resolver,
 };
@@ -135,7 +135,12 @@ pub fn run(command: Command) -> Result<()> {
                 }
                 println!(
                     "Binaries:    {}\nDependencies: {}",
-                    target.bins.join(", "),
+                    target
+                        .bins
+                        .iter()
+                        .map(|bin| bin.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     target.dependencies.join(", ")
                 );
             }
@@ -242,11 +247,15 @@ pub fn run(command: Command) -> Result<()> {
             let link = config.root.join("bin").join(&command);
             let app = crate::links::owner(&link)?
                 .ok_or_else(|| anyhow::anyhow!("managed executable not found: {command}"))?;
-            anyhow::ensure!(
-                crate::state::current(&config, &app)?.is_some(),
-                "executable package is not installed"
-            );
-            println!("{}", fs::canonicalize(link)?.display());
+            let (directory, record) = crate::state::current(&config, &app)?
+                .ok_or_else(|| anyhow::anyhow!("executable package is not installed"))?;
+            let bin = record
+                .bins
+                .iter()
+                .find(|bin| bin.name == command)
+                .ok_or_else(|| anyhow::anyhow!("command is not declared by its owner"))?;
+            let (target, _) = crate::shims::resolve(&directory, bin)?;
+            println!("{}", fs::canonicalize(target)?.display());
             Ok(())
         }
         Command::Update(options) => crate::maintenance::update(&config, &options),
@@ -324,17 +333,17 @@ pub fn search(buckets: &Buckets, query: &str) -> Result<()> {
                     continue;
                 }
             };
-            let mut bins = strings(manifest.value.get("bin"));
+            let mut bins = crate::manifest::binaries(manifest.value.get("bin"))?;
             if let Some(arches) = manifest
                 .value
                 .get("architecture")
                 .and_then(|v| v.as_object())
             {
                 for entry in arches.values() {
-                    bins.extend(strings(entry.get("bin")));
+                    bins.extend(crate::manifest::binaries(entry.get("bin"))?);
                 }
             }
-            let mut basenames: Vec<_> = bins.iter().filter_map(|b| b.rsplit('/').next()).collect();
+            let mut basenames: Vec<_> = bins.iter().map(|bin| bin.name.as_str()).collect();
             basenames.sort();
             basenames.dedup();
             if query.is_match(name) || basenames.iter().any(|b| query.is_match(b)) {

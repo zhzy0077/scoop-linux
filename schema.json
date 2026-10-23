@@ -26,7 +26,7 @@
       "additionalProperties": false,
       "properties": {
         "bin": {
-          "$ref": "#/definitions/relativePaths"
+          "$ref": "#/definitions/binaryEntries"
         },
         "checkver": {
           "anyOf": [
@@ -153,6 +153,36 @@
           }
         }
       ]
+    },
+    "binaryEntries": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\u0000]+$"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\u0000]+$"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[^\\u0000]*$"
+                }
+              }
+            ]
+          }
+        }
+      ]
     }
   },
   "properties": {
@@ -182,7 +212,7 @@
       "type": "object"
     },
     "bin": {
-      "$ref": "#/definitions/relativePaths"
+      "$ref": "#/definitions/binaryEntries"
     },
     "checkver": {
       "anyOf": [
@@ -249,5 +279,5 @@
   ],
   "title": "Scoop Linux MVP manifest",
   "type": "object",
-  "description": "Linux manifests: architecture-less artifacts assert architecture-independent content. Native artifacts require exact architecture entries. bin paths expose exact basenames as symlinks; aliases and arguments are unsupported. checkver/autoupdate are inert authoring metadata."
+  "description": "Linux package manifests. Native artifacts require architecture entries. bin uses Scoop shim definitions: a target string or nested [target, name, arguments] entries. Command names default to the lowercase filename with its final extension removed. Fixed arguments use POSIX quoting. checkver/autoupdate are authoring metadata."
 }

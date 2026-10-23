@@ -125,14 +125,15 @@ pub fn checkup(config: &Config) -> Result<()> {
                         Record::load(&version.path())?;
                     }
                     for bin in &record.bins {
-                        let declared = crate::archive::resolve_link(&dir, Path::new(bin))?;
+                        let (declared, _) = crate::shims::resolve(&dir, bin)?;
                         let metadata = fs::metadata(&declared)
-                            .with_context(|| format!("missing executable {bin}"))?;
+                            .with_context(|| format!("missing executable {}", bin.path))?;
                         ensure!(
                             metadata.is_file() && metadata.permissions().mode() & 0o111 != 0,
-                            "executable permission missing: {bin}"
+                            "executable permission missing: {}",
+                            bin.path
                         );
-                        let link = config.root.join("bin").join(links::basename(bin)?);
+                        let link = config.root.join("bin").join(&bin.name);
                         let owner = links::owner(&link)?.context("executable link missing")?;
                         if owner == name {
                             ensure!(
@@ -143,18 +144,21 @@ pub fn checkup(config: &Config) -> Result<()> {
                         } else {
                             eprintln!(
                                 "Note: {} is currently owned by {owner}; reset {name} to reclaim it.",
-                                links::basename(bin)?
+                                bin.name
                             );
                         }
                     }
-                    if name != "scoop" {
-                        let manifest = state::saved_manifest(&dir)?;
-                        ensure!(
-                            manifest.version()
-                                == dir.file_name().unwrap_or_default().to_string_lossy(),
-                            "manifest/current version mismatch"
-                        );
-                    }
+                    crate::shims::verify(
+                        &dir,
+                        &entry.path().join("current"),
+                        &config.root.join("persist").join(&name),
+                        &record.bins,
+                    )?;
+                    let manifest = state::saved_manifest(&dir)?;
+                    ensure!(
+                        manifest.version() == dir.file_name().unwrap_or_default().to_string_lossy(),
+                        "manifest/current version mismatch"
+                    );
                     Ok(())
                 })(),
             );

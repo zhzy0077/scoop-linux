@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    manifest::{self, Manifest},
+    manifest::{self, Binary, Manifest},
     resolve::{Resolved, Source},
 };
 use anyhow::{Context, Result, ensure};
@@ -22,10 +22,10 @@ pub struct Record {
     pub manifest_path: Option<PathBuf>,
     pub hold: bool,
     pub installed_at: u64,
-    pub bins: Vec<String>,
+    pub bins: Vec<Binary>,
 }
 impl Record {
-    pub fn new(resolved: &Resolved, architecture: &str, bins: Vec<String>) -> Self {
+    pub fn new(resolved: &Resolved, architecture: &str, bins: Vec<Binary>) -> Self {
         let (bucket, url, commit, path) = match &resolved.source {
             Source::Bucket {
                 name, commit, path, ..
@@ -41,7 +41,7 @@ impl Record {
             Source::Url(url) => (None, Some(url.clone()), None, None),
         };
         Self {
-            format_version: 1,
+            format_version: 2,
             architecture: architecture.into(),
             bucket,
             url,
@@ -64,9 +64,17 @@ impl Record {
         )
         .with_context(|| format!("invalid installation record {}", path.display()))?;
         ensure!(
-            record.format_version == 1,
+            record.format_version == 2,
             "unsupported installation record format"
         );
+        let mut commands = std::collections::HashSet::new();
+        for bin in &record.bins {
+            bin.validate()?;
+            ensure!(
+                commands.insert(&bin.name),
+                "duplicate shim name in installation record"
+            );
+        }
         Ok(record)
     }
 }

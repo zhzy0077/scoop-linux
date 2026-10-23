@@ -18,7 +18,7 @@ pub struct Artifact {
 pub struct Target {
     pub architecture: String,
     pub artifacts: Vec<Artifact>,
-    pub bins: Vec<String>,
+    pub bins: Vec<Binary>,
     pub dependencies: Vec<String>,
 }
 pub fn name(value: &str) -> Result<()> {
@@ -56,21 +56,104 @@ pub fn strings(value: Option<&Value>) -> Vec<String> {
         _ => vec![],
     }
 }
-fn validate_bins(bins: &[String]) -> Result<()> {
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Binary {
+    pub path: String,
+    pub name: String,
+    pub args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<std::path::PathBuf>,
+}
+impl Binary {
+    pub fn same_definition(&self, other: &Self) -> bool {
+        self.path == other.path && self.name == other.name && self.args == other.args
+    }
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            !self.path.is_empty() && !self.path.contains(['\\', '\0']),
+            "invalid shim target"
+        );
+        if !Path::new(&self.path).is_absolute() {
+            relative(&self.path)?;
+        }
+        ensure!(
+            self.external.as_ref().is_none_or(|path| path.is_absolute()),
+            "external shim target must be absolute"
+        );
+        relative(&self.name)?;
+        ensure!(
+            !self.name.contains('/') && self.name == self.name.to_lowercase(),
+            "invalid shim name"
+        );
+        ensure!(
+            self.args.iter().all(|arg| !arg.contains('\0')),
+            "shim arguments contain a NUL byte"
+        );
+        Ok(())
+    }
+}
+pub fn binaries(value: Option<&Value>) -> Result<Vec<Binary>> {
+    let entries = match value {
+        None => return Ok(Vec::new()),
+        Some(value @ Value::String(_)) => vec![value],
+        Some(Value::Array(entries)) => entries.iter().collect(),
+        _ => bail!("bin must be a path or a list of shim definitions"),
+    };
     let mut names = HashSet::new();
-    for bin in bins {
-        relative(bin)?;
-        let base = Path::new(bin)
+    let mut result = Vec::new();
+    for entry in entries {
+        let fields = if let Some(path) = entry.as_str() {
+            vec![path]
+        } else {
+            entry
+                .as_array()
+                .context("bin entries must be paths or shim definitions")?
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .context("bin definition fields must be strings")
+                })
+                .collect::<Result<Vec<_>>>()?
+        };
+        let path = fields
+            .first()
+            .context("bin definitions require a target")?
+            .replace('\\', "/");
+        ensure!(!path.contains('\0'), "bin target contains a NUL byte");
+        if !Path::new(&path).is_absolute() {
+            relative(&path)?;
+        }
+        let basename = Path::new(&path)
             .file_name()
             .and_then(|s| s.to_str())
             .context("bin needs an executable basename")?;
-        ensure!(names.insert(base), "duplicate bin basename '{base}'");
+        let default_name = basename.rsplit_once('.').map_or(basename, |(stem, _)| stem);
+        let name = fields
+            .get(1)
+            .filter(|name| !name.is_empty())
+            .copied()
+            .unwrap_or(default_name)
+            .to_lowercase();
+        relative(&name)?;
+        ensure!(!name.contains('/'), "shim name must be a single basename");
+        ensure!(names.insert(name.clone()), "duplicate shim name '{name}'");
+        let arguments = fields.get(2..).unwrap_or_default().join(" ");
         ensure!(
-            !bin.ends_with('/') && base != ".",
-            "invalid executable path '{bin}'"
+            !arguments.contains('\0'),
+            "shim arguments contain a NUL byte"
         );
+        let args = shlex::split(&arguments).context("invalid quoting in shim arguments")?;
+        let bin = Binary {
+            path,
+            name,
+            args,
+            external: None,
+        };
+        bin.validate()?;
+        result.push(bin);
     }
-    Ok(())
+    Ok(result)
 }
 impl Manifest {
     pub fn parse(raw: String) -> Result<Self> {
@@ -103,24 +186,6 @@ impl Manifest {
                 }
             }
         }
-        let check_bin_shape = |entry: &Value, location: &str| -> Result<()> {
-            if entry
-                .get("bin")
-                .and_then(Value::as_array)
-                .is_some_and(|bins| bins.iter().any(Value::is_array))
-            {
-                bail!(
-                    "unsupported manifest feature: {location}bin aliases or fixed arguments; use relative executable paths"
-                );
-            }
-            Ok(())
-        };
-        check_bin_shape(&value, "")?;
-        if let Some(arches) = value.get("architecture").and_then(Value::as_object) {
-            for (arch, entry) in arches {
-                check_bin_shape(entry, &format!("architecture.{arch}."))?;
-            }
-        }
         static SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
         let validator = SCHEMA.get_or_init(|| {
             jsonschema::validator_for(
@@ -145,7 +210,7 @@ impl Manifest {
                     "architecture key '{arch}' must be canonical"
                 );
                 manifest.validate_fields(entry)?;
-                validate_bins(&strings(entry.get("bin").or(manifest.value.get("bin"))))?;
+                binaries(entry.get("bin").or(manifest.value.get("bin")))?;
             }
         }
         for dep in strings(manifest.value.get("depends")) {
@@ -154,12 +219,12 @@ impl Manifest {
         Ok(manifest)
     }
     fn validate_fields(&self, value: &Value) -> Result<()> {
-        for field in ["extract_dir", "extract_to", "bin"] {
+        for field in ["extract_dir", "extract_to"] {
             for path in strings(value.get(field)) {
                 relative(&path)?;
             }
         }
-        validate_bins(&strings(value.get("bin")))?;
+        binaries(value.get("bin"))?;
         for url in strings(value.get("url")) {
             let parsed = reqwest::Url::parse(&url).context("invalid artifact URL")?;
             ensure!(
@@ -244,9 +309,20 @@ impl Manifest {
         Ok(Target {
             architecture: arch.to_owned(),
             artifacts,
-            bins: strings(field("bin")),
+            bins: binaries(field("bin"))?,
             dependencies: strings(self.value.get("depends")),
         })
+    }
+    pub fn binaries(&self, arch: &str) -> Result<Vec<Binary>> {
+        let entry = self
+            .value
+            .get("architecture")
+            .and_then(|arches| arches.get(arch));
+        binaries(
+            entry
+                .and_then(|entry| entry.get("bin"))
+                .or(self.value.get("bin")),
+        )
     }
     pub fn notes(&self, active: &Path, original: &Path) -> Vec<String> {
         strings(self.value.get("notes"))

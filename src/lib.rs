@@ -14,5 +14,6 @@ pub mod network;
 pub mod platform;
 pub mod resolve;
 pub mod scoopfile;
+pub mod shims;
 pub mod state;
 pub mod version;
