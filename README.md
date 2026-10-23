@@ -103,8 +103,6 @@ Installed versions save the exact manifest and a format-versioned `scoop-install
 
 `status --local` uses local metadata. Ordinary status checks release metadata and fetches bucket refs, warns about remote changes, and prints the local package table with holds, missing dependencies and unavailable manifests. It preserves bucket worktrees, Scoop activation and `last_update`; network failures warn and fall back to the local table. `hold`/`unhold` atomically update installation records. `hold scoop` sets the upstream `hold_update_until` key one day ahead; self-holds still allow bucket refresh. `reset app@version` switches to a validated native retained version; `reset app` restores/reclaims its command links. `reset '*'` and `--all` cover installed apps. `cleanup` removes inactive recognized versions; `--cache` also removes those apps' non-current downloads. Cache show/rm selects managed cache filenames, preserving unrelated files. Cleanup/reset/recovery leave external XDG application data untouched.
 
-Fault injection is compiled only with `--features test-hooks`. Tests can select `SCOOP_TEST_FAILPOINT=prepared|backup|published|current|links|committed` and `SCOOP_TEST_CRASH=1` to interrupt activation. Normal builds contain no active failpoint handling or private-CA test override. Hook builds can use `SCOOP_TEST_CA_CERT` to trust the HTTPS fixture's certificate; TLS verification stays enabled.
-
 ## Bootstrap and self-update
 
 Run the built executable with `./target/release/scoop --bootstrap /absolute/release-catalog.json` (HTTPS and file catalog locations also work). This installer mode preserves the 24-command interface. It downloads and verifies the exact compatible native release, installs `apps/scoop/<version>/scoop`, creates the stable `bin/scoop` symlink, initializes the configured Linux main bucket, saves the catalog/main-bucket configuration and prints the absolute PATH directory.
@@ -130,8 +128,6 @@ A local catalog example (replace all local paths and the checksum with real rele
 
 `release_catalog` or `SCOOP_RELEASE_CATALOG` selects update metadata; `SCOOP_INTERNAL_REFRESH_CONTINUE` is the process-handoff marker used to finish bucket refresh under the updated executable. Bootstrap selects its main source from `SCOOP_MAIN_BUCKET`, config `main_bucket_url`, catalog `main_bucket_url`, then the canonical registry default. A catalog can omit `main_bucket_url` to use that default. Bootstrap persists the selected source in config `main_bucket_url`; `scoop config rm main_bucket_url` removes that override. Self-update stages and verifies the ELF executable and its declared version, journals activation, then continues the original command under the updated executable. Bucket refresh and `last_update` completion occur in that updated process. Old Scoop releases remain until explicit cleanup. Hosted release artifact/catalog locations are separate release configuration. The main bucket is maintained in the separate `scoop-linux-pkgs` repository.
 
-Tests use actual temporary Git histories, files, HTTP servers, malicious ZIP/tar fixtures and subprocess CLI invocation. Inside the native build container, `sh tests/build-distribution.sh /workspace/target/fedora` records exact Cargo test artifacts with test hooks enabled and builds an independent version-changed Rust release under `real-release2/`, reusing native compiled dependencies. Its HTTPS/multi-target/hold/concurrent/crash tests run in the distribution gate; they verify the actual updated Rust executable is the ancestor performing bucket refresh. Build the production release afterward with `cargo build --release --locked`, since the secondary build shares the builder's release output directory. `sh tests/run-distribution.sh /workspace/target/fedora` runs those integration artifacts and Bash/Zsh/Fish CLI checks in each compatible native Linux container; the lifecycle suites execute package wrappers and native ELF packages through each shell, check I/O/signals, and verify external XDG data survives actual uninstall.
-
 ## Scoopfiles and diagnostics
 
 `export [-c]` writes JSON only to stdout, with upstream `buckets`/`apps` and optional `config`. App fields are `Name`, `Version`, `Source`, RFC 3339 `Updated`, and comma-separated `Info` (native architecture and optional `Held package`). Machine-specific root/cache/alias/refresh keys and the release-channel keys `release_catalog`/`main_bucket_url` are omitted and refused on import. Export returns nonzero if an app/bucket cannot be represented, while stdout remains valid JSON. File/URL source paths remain explicit; a local source must be accessible on the destination machine.
@@ -140,31 +136,20 @@ Tests use actual temporary Git histories, files, HTTP servers, malicious ZIP/tar
 
 `checkup` checks Git, the absolute bin directory in PATH, root/cache/config write access, managed directories, current/retained installation records, executable permissions and links. It prints each issue and fails when repair is required. `reset app` repairs managed executable links. `home app` passes its HTTP(S) homepage as one argument to `xdg-open` and reports launcher failures.
 
-## Development tests
+## Development checks
 
-Run development checks in a native Podman container with Rust/Cargo and the test tools below:
+Run development checks with Rust/Cargo, rustfmt, and Clippy:
 
 ```sh
 cargo fmt --check
-cargo test --locked
 cargo clippy --locked --all-targets --all-features -- -D warnings
 ```
 
-The remaining suites cover CLI/configuration, synthetic Git/HTTP fixtures, manifests, archive/download security, package lifecycle, journals, concurrency, diagnostics and runtime self-update. Distribution test helpers are under `tests/`; package-bucket maintenance is separate from this source repository.
+### Tagged releases
 
-### Native verification tools
+Set the package version in `Cargo.toml` and `Cargo.lock`, commit it, then push a matching tag with an optional `v` prefix (for example, `git tag 0.0.1 && git push origin 0.0.1`). The release workflow checks and builds both native architectures on Ubuntu 24.04, then publishes a GitHub Release with `scoop-x86_64-unknown-linux-gnu`, `scoop-aarch64-unknown-linux-gnu`, `release-catalog.json`, and `SHA256SUMS`. Tags containing a prerelease suffix produce a GitHub prerelease. Runtime library requirements and the minimum glibc version are derived from each production binary.
 
-The broad distribution integration suites additionally require the **OpenSSL CLI** for generating the private HTTPS fixture certificate, Python 3 for its TLS server/runner, Git, a native C compiler for the retained ELF-front-end fixtures, Bash/Zsh/Fish and `cmp` (diffutils). These are test-image tools; the Scoop runtime prerequisites are listed separately below. OpenSSL libraries alone do not provide the `openssl` command.
-
-```sh
-# Fedora native test image:
-dnf install -y openssl python3 git gcc bash zsh fish diffutils
-# Ubuntu native test image (no build-essential or Rust compiler needed for runtime checks):
-apt-get install -y openssl python3 git gcc bash zsh fish diffutils
-sh tests/check-distribution-tools.sh
-```
-
-Native builders also need Cargo/Rust with rustfmt and Clippy. `tests/run-distribution.sh` checks test-tool availability before executing any suite. Direct hook-enabled HTTPS test invocation reports the missing OpenSSL CLI explicitly. All HTTPS/update assertions remain required.
+For stable self-updates, configure `release_catalog` to `https://github.com/zhzy0077/scoop-linux/releases/latest/download/release-catalog.json`. Download the binary for your architecture, mark it executable, and use that catalog with `--bootstrap` to install. The workflow uses the repository's automatic `GITHUB_TOKEN` with release write permission in the publishing job.
 
 ### Validated GNU runtime matrix
 
