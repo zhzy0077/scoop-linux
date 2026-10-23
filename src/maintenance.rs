@@ -175,6 +175,7 @@ fn outdated(config: &Config, old: &str, new: &str) -> bool {
             && order != Ordering::Equal)
 }
 pub fn status(config: &Config, local: bool) -> Result<()> {
+    let mut needs_attention = false;
     if !local {
         let buckets = crate::buckets::Buckets::new(&config.root);
         for name in buckets.names()? {
@@ -188,17 +189,21 @@ pub fn status(config: &Config, local: bool) -> Result<()> {
                 let current = crate::buckets::git(&repo, &["rev-parse", "HEAD"])?;
                 let fetched = crate::buckets::git(&repo, &["rev-parse", "FETCH_HEAD"])?;
                 if current != fetched {
+                    needs_attention = true;
                     eprintln!("Bucket {name} has remote changes; run scoop update.");
                 }
                 Ok(())
             })();
             if let Err(error) = result {
+                needs_attention = true;
                 eprintln!("warning: bucket {name} check failed; using local manifests: {error:#}");
             }
         }
     }
-    println!("Name\tInstalled Version\tLatest Version\tInfo");
-    for (app, dir, record) in state::installed(config)? {
+    let inventory = state::inventory(config)?;
+    needs_attention |= !inventory.issues.is_empty();
+    let mut rows = Vec::new();
+    for (app, dir, record) in inventory.apps {
         let old = dir
             .file_name()
             .and_then(|s| s.to_str())
@@ -216,7 +221,7 @@ pub fn status(config: &Config, local: bool) -> Result<()> {
                         })
                         .collect();
                 if outdated(config, old, new) || record.hold || !missing.is_empty() {
-                    println!(
+                    rows.push(format!(
                         "{app}\t{old}\t{new}\t{}{}",
                         if record.hold { "Held package" } else { "" },
                         if missing.is_empty() {
@@ -224,11 +229,19 @@ pub fn status(config: &Config, local: bool) -> Result<()> {
                         } else {
                             format!(" Missing dependencies: {}", missing.join(", "))
                         }
-                    );
+                    ));
                 }
             }
-            Err(error) => println!("{app}\t{old}\t?\tManifest unavailable: {error}"),
+            Err(error) => rows.push(format!("{app}\t{old}\t?\tManifest unavailable: {error}")),
         }
+    }
+    if !rows.is_empty() {
+        println!("Name\tInstalled Version\tLatest Version\tInfo");
+        for row in rows {
+            println!("{row}");
+        }
+    } else if !needs_attention {
+        println!("Everything is ok!");
     }
     Ok(())
 }
