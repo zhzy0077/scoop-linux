@@ -247,15 +247,11 @@ pub fn run(command: Command) -> Result<()> {
             let link = config.root.join("bin").join(&command);
             let app = crate::links::owner(&link)?
                 .ok_or_else(|| anyhow::anyhow!("managed executable not found: {command}"))?;
-            let (directory, record) = crate::state::current(&config, &app)?
-                .ok_or_else(|| anyhow::anyhow!("executable package is not installed"))?;
-            let bin = record
-                .bins
-                .iter()
-                .find(|bin| bin.name == command)
-                .ok_or_else(|| anyhow::anyhow!("command is not declared by its owner"))?;
-            let (target, _) = crate::shims::resolve(&directory, bin)?;
-            println!("{}", fs::canonicalize(target)?.display());
+            anyhow::ensure!(
+                crate::state::current(&config, &app)?.is_some(),
+                "executable package is not installed"
+            );
+            println!("{}", fs::canonicalize(link)?.display());
             Ok(())
         }
         Command::Update(options) => crate::maintenance::update(&config, &options),

@@ -279,5 +279,5 @@
   ],
   "title": "Scoop Linux MVP manifest",
   "type": "object",
-  "description": "Linux package manifests. Native artifacts require architecture entries. bin uses Scoop shim definitions: a target string or nested [target, name, arguments] entries. Command names default to the lowercase filename with its final extension removed. Fixed arguments use POSIX quoting. checkver/autoupdate are authoring metadata."
+  "description": "Linux package manifests. Native artifacts require architecture entries. bin uses Scoop shim definitions: a relative target string or nested [target, name] entries; fixed arguments are rejected. Command names default to the lowercase filename with its final extension removed. checkver/autoupdate are authoring metadata."
 }

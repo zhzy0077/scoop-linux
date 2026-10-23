@@ -60,44 +60,25 @@ pub fn strings(value: Option<&Value>) -> Vec<String> {
 pub struct Binary {
     pub path: String,
     pub name: String,
-    pub args: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub external: Option<std::path::PathBuf>,
 }
 impl Binary {
-    pub fn same_definition(&self, other: &Self) -> bool {
-        self.path == other.path && self.name == other.name && self.args == other.args
-    }
     pub fn validate(&self) -> Result<()> {
-        ensure!(
-            !self.path.is_empty() && !self.path.contains(['\\', '\0']),
-            "invalid shim target"
-        );
-        if !Path::new(&self.path).is_absolute() {
-            relative(&self.path)?;
-        }
-        ensure!(
-            self.external.as_ref().is_none_or(|path| path.is_absolute()),
-            "external shim target must be absolute"
-        );
+        relative(&self.path)?;
         relative(&self.name)?;
         ensure!(
             !self.name.contains('/') && self.name == self.name.to_lowercase(),
-            "invalid shim name"
-        );
-        ensure!(
-            self.args.iter().all(|arg| !arg.contains('\0')),
-            "shim arguments contain a NUL byte"
+            "invalid bin name"
         );
         Ok(())
     }
 }
+/// Parse Scoop `bin` definitions: a target, or `[target, name, arguments]`.
 pub fn binaries(value: Option<&Value>) -> Result<Vec<Binary>> {
     let entries = match value {
         None => return Ok(Vec::new()),
         Some(value @ Value::String(_)) => vec![value],
         Some(Value::Array(entries)) => entries.iter().collect(),
-        _ => bail!("bin must be a path or a list of shim definitions"),
+        _ => bail!("bin must be a path or a list of bin definitions"),
     };
     let mut names = HashSet::new();
     let mut result = Vec::new();
@@ -107,7 +88,7 @@ pub fn binaries(value: Option<&Value>) -> Result<Vec<Binary>> {
         } else {
             entry
                 .as_array()
-                .context("bin entries must be paths or shim definitions")?
+                .context("bin entries must be paths or bin definitions")?
                 .iter()
                 .map(|value| {
                     value
@@ -120,10 +101,11 @@ pub fn binaries(value: Option<&Value>) -> Result<Vec<Binary>> {
             .first()
             .context("bin definitions require a target")?
             .replace('\\', "/");
-        ensure!(!path.contains('\0'), "bin target contains a NUL byte");
-        if !Path::new(&path).is_absolute() {
-            relative(&path)?;
-        }
+        relative(&path)?;
+        ensure!(
+            fields.iter().skip(2).all(|arg| arg.trim().is_empty()),
+            "unsupported manifest feature: bin fixed arguments for '{path}'"
+        );
         let basename = Path::new(&path)
             .file_name()
             .and_then(|s| s.to_str())
@@ -135,21 +117,8 @@ pub fn binaries(value: Option<&Value>) -> Result<Vec<Binary>> {
             .copied()
             .unwrap_or(default_name)
             .to_lowercase();
-        relative(&name)?;
-        ensure!(!name.contains('/'), "shim name must be a single basename");
-        ensure!(names.insert(name.clone()), "duplicate shim name '{name}'");
-        let arguments = fields.get(2..).unwrap_or_default().join(" ");
-        ensure!(
-            !arguments.contains('\0'),
-            "shim arguments contain a NUL byte"
-        );
-        let args = shlex::split(&arguments).context("invalid quoting in shim arguments")?;
-        let bin = Binary {
-            path,
-            name,
-            args,
-            external: None,
-        };
+        ensure!(names.insert(name.clone()), "duplicate bin name '{name}'");
+        let bin = Binary { path, name };
         bin.validate()?;
         result.push(bin);
     }
@@ -312,17 +281,6 @@ impl Manifest {
             bins: binaries(field("bin"))?,
             dependencies: strings(self.value.get("depends")),
         })
-    }
-    pub fn binaries(&self, arch: &str) -> Result<Vec<Binary>> {
-        let entry = self
-            .value
-            .get("architecture")
-            .and_then(|arches| arches.get(arch));
-        binaries(
-            entry
-                .and_then(|entry| entry.get("bin"))
-                .or(self.value.get("bin")),
-        )
     }
     pub fn notes(&self, active: &Path, original: &Path) -> Vec<String> {
         strings(self.value.get("notes"))

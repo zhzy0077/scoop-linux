@@ -13,8 +13,7 @@ pub fn target(app: &str, bin: &Binary) -> PathBuf {
     Path::new("../apps")
         .join(app)
         .join("current")
-        .join(crate::shims::DIRECTORY)
-        .join(&bin.name)
+        .join(&bin.path)
 }
 pub fn owner(path: &Path) -> Result<Option<String>> {
     let target = match fs::read_link(path) {

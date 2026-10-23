@@ -80,7 +80,7 @@ Require `version`, `homepage`, and `license`, matching the upstream schema. An i
 | `cookie` | Scoop's name/value object for download cookies. |
 | `architecture.<architecture>` | Exact target selection and field inheritance as specified above. Supported per-architecture fields are `url`, `hash`, `extract_dir`, `bin`, and retained `checkver` metadata. |
 | `extract_dir`, `extract_to` | String or array selecting an archive subtree and destination within the version directory. Pair entries in extracted-archive order, as upstream does; raw-file downloads do not consume extraction entries. `extract_to` stays top-level, matching upstream's schema. |
-| `bin` | Scoop shim definitions: a target string or an array of strings and nested `[target, name, arguments]` entries. Resolve targets from the package, an explicit file, or PATH. Default names lowercase the filename and remove its final extension. Expose the resulting command through `~/scoop/bin`. |
+| `bin` | Scoop shim definitions: a relative target string or an array of strings and nested `[target, name]` entries. Default names lowercase the filename and remove its final extension. Expose each command as a symlink in `~/scoop/bin`. Upstream also accepts fixed arguments and external command targets. |
 | `depends`, `suggest` | `depends` is a package string or array; `suggest` maps suggestion labels to package strings or arrays. Dependencies remain top-level, as in upstream's schema. |
 | `checkver`, `autoupdate` | Retain authoring metadata; execution is outside the MVP. |
 | `$schema`, `##`, `_comment` | Accept schema identification and Scoop comment fields as metadata; validate against the local Linux schema. |
@@ -92,7 +92,7 @@ This contract was reviewed against `../Scoop/schema.json`, `arch_specific` and `
 
 Preserve archive executable modes; add execute permission for manifest-declared binaries when needed. Reject absolute or escaping extraction paths and escaping archive links. Validate package names and manifest-relative paths before filesystem operations.
 
-Shim definitions accept a target plus optional name and fixed arguments, matching upstream `shim_def` and `create_shims`. Fixed argument strings use POSIX quoting on Linux, are substituted for `$dir`, `$original_dir`, and `$persist_dir`, and precede user arguments. Generate per-version `.scoop-shims` metadata; keep extracted files unchanged. Use symlinks for packaged targets without fixed arguments and executable `exec` launchers for arguments or external targets. Reject duplicate exposed command names.
+Shim definitions accept a package-relative target plus an optional name, matching upstream `shim_def` naming. Fixed arguments and external targets are outside the MVP; reject non-empty argument fields during manifest validation. Packages needing argument or environment setup supply their own executable wrapper, declared as an ordinary `bin` target. Reject duplicate exposed command names.
 
 **Architecture**
 
@@ -169,7 +169,7 @@ The main bucket is added automatically on first package use. `scoop install scoo
 | Milestone | Deliverable | Acceptance |
 | --- | --- | --- |
 | 1 | CLI contract, config, buckets, manifest parsing, discovery | Every MVP command has documented syntax; local Git fixtures verify source resolution, architecture aliases/overrides, architecture-independent artifacts, exact-entry field inheritance, search, and errors. Reject arm64-to-64bit fallback even with top-level URLs; reject foreign installation overrides; permit explicit foreign-target downloads. Cover required metadata, checksum forms, supported field shapes, and mixed archive/raw-file extraction ordering. |
-| 2 | Cache, downloads, extraction, dependencies, install/uninstall, executable symlinks | Install and execute fixture packages; validate dependency order, shim names and fixed arguments, executable modes, package-supplied wrappers, uninstall, checksum failures, and archive containment. Verify target/name/argument definitions, default names, external target lookup, duplicate names, and invalid definitions. Invoke the same executables directly and through Bash, Zsh, and Fish. Verify that externally stored XDG data survives uninstall. |
+| 2 | Cache, downloads, extraction, dependencies, install/uninstall, executable symlinks | Install and execute fixture packages; validate dependency order, shim names, executable modes, package-supplied wrappers, uninstall, checksum failures, and archive containment. Verify target/name definitions, default names, rejection of fixed arguments and external targets, duplicate names, and invalid definitions. Invoke the same executables directly and through Bash, Zsh, and Fish. Verify that externally stored XDG data survives uninstall. |
 | 3 | Update/reset/hold, cleanup, locking, recovery, Scoop package upgrades | Exercise upgrades and retained-version switching; verify held-package behavior against upstream; inject failures around activation; validate concurrent mutations and a two-release Scoop package upgrade. |
 | 4 | Scoopfile operations, diagnostics, Linux main bucket, release packaging | Recreate an installation from export, pass clean-machine lifecycle runs covering both validation architectures and distributions, and verify all scoped commands/options. |
 

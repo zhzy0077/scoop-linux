@@ -156,20 +156,18 @@ pub(crate) fn validate_binaries(stage: &Path, manifest: &Manifest, target: &Targ
         &target.architecture,
     )?;
     for bin in &target.bins {
-        let (path, packaged) = crate::shims::resolve(stage, bin)?;
-        let metadata = fs::metadata(&path)?;
-        if packaged {
-            fs::set_permissions(
-                path,
-                fs::Permissions::from_mode((metadata.permissions().mode() & 0o777) | 0o111),
-            )?;
-        } else {
-            ensure!(
-                metadata.permissions().mode() & 0o111 != 0,
-                "external shim target is not executable: {}",
-                bin.path
-            );
-        }
+        let path = archive::resolve_link(stage, Path::new(&bin.path))?;
+        let metadata = fs::metadata(&path)
+            .with_context(|| format!("declared binary missing: {}", bin.path))?;
+        ensure!(
+            metadata.is_file(),
+            "declared binary must be a file: {}",
+            bin.path
+        );
+        fs::set_permissions(
+            path,
+            fs::Permissions::from_mode((metadata.permissions().mode() & 0o777) | 0o111),
+        )?;
     }
     Ok(())
 }
@@ -259,26 +257,18 @@ pub fn install_version(
         archive::extract(&file, artifact, stage.path())?;
     }
     validate_binaries(stage.path(), &planned.resolved.manifest, &planned.target)?;
-    for reserved in [
-        "scoop-manifest.json",
-        "scoop-install.json",
-        crate::shims::DIRECTORY,
-    ] {
+    for reserved in ["scoop-manifest.json", "scoop-install.json"] {
         ensure!(
             fs::symlink_metadata(stage.path().join(reserved))
                 .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
             "artifact attempts to supply reserved metadata: {reserved}"
         );
     }
-    let mut bins = planned.target.bins.clone();
-    crate::shims::prepare(
-        stage.path(),
-        &final_dir,
-        &app_dir.join("current"),
-        &config.root.join("persist").join(app),
-        &mut bins,
-    )?;
-    let mut record = Record::new(&planned.resolved, &planned.target.architecture, bins);
+    let mut record = Record::new(
+        &planned.resolved,
+        &planned.target.architecture,
+        planned.target.bins.clone(),
+    );
     record.hold = previous.as_ref().is_some_and(|(_, record)| record.hold);
     fs::write(
         stage.path().join("scoop-manifest.json"),

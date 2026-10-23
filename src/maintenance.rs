@@ -135,21 +135,10 @@ pub fn activate_retained_locked(config: &Config, app: &str, version: &str) -> Re
     );
     let target = manifest.target(&record.architecture, true)?;
     ensure!(
-        target.bins.len() == record.bins.len()
-            && target
-                .bins
-                .iter()
-                .zip(&record.bins)
-                .all(|(expected, actual)| expected.same_definition(actual)),
+        target.bins == record.bins,
         "retained manifest/bin record mismatch"
     );
     lifecycle::validate_binaries(&dir, &manifest, &target)?;
-    crate::shims::verify(
-        &dir,
-        &state::app_dir(config, app)?.join("current"),
-        &config.root.join("persist").join(app),
-        &record.bins,
-    )?;
     journal::activate(
         config,
         app,

@@ -125,7 +125,7 @@ pub fn checkup(config: &Config) -> Result<()> {
                         Record::load(&version.path())?;
                     }
                     for bin in &record.bins {
-                        let (declared, _) = crate::shims::resolve(&dir, bin)?;
+                        let declared = crate::archive::resolve_link(&dir, Path::new(&bin.path))?;
                         let metadata = fs::metadata(&declared)
                             .with_context(|| format!("missing executable {}", bin.path))?;
                         ensure!(
@@ -148,17 +148,14 @@ pub fn checkup(config: &Config) -> Result<()> {
                             );
                         }
                     }
-                    crate::shims::verify(
-                        &dir,
-                        &entry.path().join("current"),
-                        &config.root.join("persist").join(&name),
-                        &record.bins,
-                    )?;
-                    let manifest = state::saved_manifest(&dir)?;
-                    ensure!(
-                        manifest.version() == dir.file_name().unwrap_or_default().to_string_lossy(),
-                        "manifest/current version mismatch"
-                    );
+                    if name != "scoop" {
+                        let manifest = state::saved_manifest(&dir)?;
+                        ensure!(
+                            manifest.version()
+                                == dir.file_name().unwrap_or_default().to_string_lossy(),
+                            "manifest/current version mismatch"
+                        );
+                    }
                     Ok(())
                 })(),
             );
