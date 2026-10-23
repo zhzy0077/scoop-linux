@@ -54,7 +54,7 @@ pub enum Command {
         #[arg(short, long)]
         arch: Option<String>,
     },
-    /// Refresh Scoop and buckets, or update selected apps
+    /// Refresh buckets, or update selected packages
     Update(Update),
     /// Report outdated installed packages
     Status {
@@ -150,8 +150,9 @@ pub struct Install {
     pub no_cache: bool,
     #[arg(short = 's', long)]
     pub skip_hash_check: bool,
+    /// Skip automatic bucket refresh
     #[arg(short = 'u', long)]
-    pub no_update_scoop: bool,
+    pub no_update: bool,
     #[arg(short, long)]
     pub arch: Option<String>,
 }
@@ -163,8 +164,9 @@ pub struct Download {
     pub force: bool,
     #[arg(short = 's', long)]
     pub skip_hash_check: bool,
+    /// Skip automatic bucket refresh
     #[arg(short = 'u', long)]
-    pub no_update_scoop: bool,
+    pub no_update: bool,
     #[arg(short, long)]
     pub arch: Option<String>,
 }

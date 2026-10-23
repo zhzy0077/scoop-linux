@@ -14,7 +14,6 @@ const MACHINE_CONFIG: &[&str] = &[
     "global_path",
     "cache_path",
     "alias",
-    "release_catalog",
     "main_bucket_url",
 ];
 pub struct Export {

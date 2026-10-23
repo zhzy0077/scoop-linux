@@ -174,9 +174,6 @@ pub fn inventory(config: &Config) -> Result<Inventory> {
                 continue;
             }
         };
-        if app == "scoop" {
-            continue;
-        }
         let inspected = (|| -> Result<_> {
             manifest::name(&app)?;
             ensure!(

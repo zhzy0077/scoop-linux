@@ -46,7 +46,6 @@ pub fn plan(
             return Ok(());
         }
         state::version_name(resolved.manifest.version())?;
-        ensure!(name != "scoop", "scoop is reserved for the package manager");
         let target = resolved.manifest.target(arch, skip)?;
         // Validate download names and format support before any mutation or network artifact fetch.
         for artifact in &target.artifacts {
@@ -397,10 +396,6 @@ pub fn uninstall(config: &Config, apps: &[String]) -> Result<()> {
         let result = (|| {
             let app = state::operand_name(operand)?;
             crate::journal::ensure_clear(config, app)?;
-            ensure!(
-                app != "scoop",
-                "uninstalling the package manager requires bootstrap tooling"
-            );
             let app_dir = state::app_dir(config, app)?;
             let (_, active) = state::current(config, app)?.context("package is not installed")?;
             let mut versions = Vec::new();

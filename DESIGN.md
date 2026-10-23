@@ -27,9 +27,9 @@ Support the following options in the MVP, including their upstream short forms. 
 
 | Commands | MVP options |
 | --- | --- |
-| `install` | `-i/--independent`, `-k/--no-cache`, `-s/--skip-hash-check`, `-u/--no-update-scoop`, `-a/--arch <architecture>` |
+| `install` | `-i/--independent`, `-k/--no-cache`, `-s/--skip-hash-check`, `-u/--no-update`, `-a/--arch <architecture>` |
 | `update` | `-f/--force`, `-i/--independent`, `-k/--no-cache`, `-s/--skip-hash-check`, `-q/--quiet`, `-a/--all` |
-| `download` | `-f/--force`, `-s/--skip-hash-check`, `-u/--no-update-scoop`, `-a/--arch <architecture>` |
+| `download` | `-f/--force`, `-s/--skip-hash-check`, `-u/--no-update`, `-a/--arch <architecture>` |
 | `depends` | `-a/--arch <architecture>` |
 | `cleanup` | `-a/--all`, `-k/--cache` |
 | `reset`, `cache rm` | `-a/--all` |
@@ -37,7 +37,7 @@ Support the following options in the MVP, including their upstream short forms. 
 | `info` | `-v/--verbose` |
 | `export` | `-c/--config` |
 
-The MVP has an architecture-agnostic core and a shell-agnostic command interface, with portable CLI packages delivered as standalone binaries, ZIP, tar.gz, or tar.xz archives. Git is a bootstrap dependency.
+The MVP has an architecture-agnostic core and a shell-agnostic command interface, with portable CLI packages delivered as standalone binaries, ZIP, tar.gz, or tar.xz archives. Git is required to manage buckets.
 
 Detect the native host architecture; resolve the requested architecture in order of explicit `--arch`, `default_architecture`, then host architecture. Keep Scoop's `64bit`, `32bit`, and `arm64` names, normalizing unambiguous Linux aliases such as `x86_64`, `i686`, and `aarch64`. Treat 32-bit ARM as distinct from `arm64`. Permit additional canonical architecture keys, such as `riscv64`, without changing lifecycle code; these keys extend the upstream schema.
 
@@ -50,7 +50,7 @@ Architecture resolution follows these rules:
 
 The MVP assumes native execution. CPU translation and emulation are outside its execution model.
 
-Rust executables and native package artifacts are built for particular targets. Publish a target-indexed release catalog for bootstrap and self-update, including architecture and libc/ABI requirements. Adding a target requires a compatible build and validation; package availability depends on its published artifacts. Running a selected artifact requires a compatible CPU and libc/ABI. Initial release validation covers x86-64 and arm64 Linux, with Ubuntu LTS and current Fedora coverage; the resolver accepts additional canonical architecture keys.
+Rust executables and native package artifacts are built for particular targets. Publish Scoop as a regular architecture-indexed package in the main bucket. Release binaries must satisfy the documented glibc baseline and runtime library requirements. Adding a target requires a compatible build and validation; package availability depends on its published artifacts. Running a selected artifact requires a compatible CPU and libc/ABI. Initial release validation covers x86-64 and arm64 Linux, with Ubuntu LTS and current Fedora coverage; the resolver accepts additional canonical architecture keys.
 
 The next compatibility milestone adds global installs and `--global`, shell hooks and custom installers, shell environment integration (`env_add_path` and `env_set`), desktop shortcuts, the three deferred commands, additional archive/hash formats, nightly packages, autoupdate-generated historical manifests, and optional config integrations such as aria2, SQLite indexing, and custom Scoop source branches. PowerShell modules, Windows installers, and registry operations require an explicitly designed platform equivalent. The MVP rejects manifests that require unsupported execution features before downloading or modifying an installation.
 
@@ -88,7 +88,7 @@ Require `version`, `homepage`, and `license`, matching the upstream schema. An i
 
 Reject unknown operational fields instead of silently skipping installation behavior. Validate architecture entries against the supported field set; extending architecture names does not permit arbitrary per-architecture properties. Keep authoring metadata inert.
 
-This contract was reviewed against `../Scoop/schema.json`, `arch_specific` and `Get-SupportedArchitecture` in `lib/manifest.ps1`, `shim_def` and `show_notes` in `lib/install.ps1`, and `Invoke-Extraction` in `lib/decompress.ps1`. Upstream's runtime accepts per-architecture `extract_to` through its generic accessor, while its schema omits that property; the MVP follows the schema here. Release-target libc/ABI metadata belongs to the release catalog described above and introduces no package-manifest fields.
+This contract was reviewed against `../Scoop/schema.json`, `arch_specific` and `Get-SupportedArchitecture` in `lib/manifest.ps1`, `shim_def` and `show_notes` in `lib/install.ps1`, and `Invoke-Extraction` in `lib/decompress.ps1`. Upstream's runtime accepts per-architecture `extract_to` through its generic accessor, while its schema omits that property; the MVP follows the schema here. Scoop uses the same package-manifest schema as other native packages.
 
 Preserve archive executable modes; add execute permission for manifest-declared binaries when needed. Reject absolute or escaping extraction paths and escaping archive links. Validate package names and manifest-relative paths before filesystem operations.
 
@@ -114,7 +114,7 @@ Package lifecycle / dependency planning
 
 Use `clap` for command parsing, `serde`/`serde_json` for data, `reqwest` with Rustls for HTTP, `sha2` for checksums, and established archive libraries. Invoke system Git with argument arrays for bucket operations. Keep installed records and manifests as the source of truth; scan local bucket JSON for searches at MVP scale.
 
-Suggested source modules: `cli`, `commands`, `config`, `platform`, `buckets`, `manifest`, `resolve`, `download`, `archive`, `state`, `lifecycle`, `links`, and `self_update`. The `platform` module owns host detection, architecture normalization, and release-target selection.
+Suggested source modules: `cli`, `commands`, `config`, `platform`, `buckets`, `manifest`, `resolve`, `download`, `archive`, `state`, `lifecycle`, and `links`. The `platform` module owns host detection and architecture normalization.
 
 **Filesystem and state**
 
@@ -160,17 +160,17 @@ For command-name collisions between packages, match Scoop's installation/reset o
 
 Expose each declared executable through an ordinary relative symlink, for example `~/scoop/bin/rg -> ../apps/ripgrep/current/bin/rg`. The operating system executes the package's binary or wrapper directly. Arguments, environment, working directory, streams, signals, and exit status follow normal Linux execution semantics. The MVP implementation consists of symlink management; package execution requires no Scoop launcher or per-command runtime metadata.
 
-Bootstrap installs a stable `scoop` symlink in `bin` and prints the absolute directory to add to `PATH`. Users configure that directory through their shell, session manager, or existing environment configuration. Commands work from any shell or direct process invocation; absolute paths also work. Changes to `current` immediately affect existing executable symlinks. A child process cannot change its parent shell's environment, so future shell-wide environment integration requires an explicit adapter.
+Installing the Scoop package creates a stable `scoop` symlink in `bin`. Add the absolute directory to `PATH`. Users configure that directory through their shell, session manager, or existing environment configuration. Commands work from any shell or direct process invocation; absolute paths also work. Changes to `current` immediately affect existing executable symlinks. A child process cannot change its parent shell's environment, so future shell-wide environment integration requires an explicit adapter.
 
-Bootstrap downloads a checksummed release binary and initializes the Linux `main` bucket. The release repository and main-bucket URL are release configuration that must be supplied before publishing. `scoop update` obtains the next compatible release binary, verifies it, stages it under `apps/scoop`, switches `current`, then continues bucket refresh using the updated binary. Preserve the reference's automatic refresh timing and `--no-update-scoop` behavior.
+The main bucket is added automatically on first package use. `scoop install scoop` installs Scoop through the standard package lifecycle. `scoop update` refreshes bucket manifests; `scoop update scoop` and `scoop update --all` upgrade Scoop as a normal package. Holds, inventory, status, reset, cleanup, Scoopfiles and uninstall apply uniformly. An in-flight command continues using its open executable; the next invocation uses the activated version. Automatic bucket refresh retains the three-hour timing policy and `--no-update` option.
 
 **Implementation milestones and acceptance**
 
 | Milestone | Deliverable | Acceptance |
 | --- | --- | --- |
 | 1 | CLI contract, config, buckets, manifest parsing, discovery | Every MVP command has documented syntax; local Git fixtures verify source resolution, architecture aliases/overrides, architecture-independent artifacts, exact-entry field inheritance, search, and errors. Reject arm64-to-64bit fallback even with top-level URLs; reject foreign installation overrides; permit explicit foreign-target downloads. Cover required metadata, checksum forms, supported field shapes, and mixed archive/raw-file extraction ordering. |
-| 2 | Cache, downloads, extraction, dependencies, install/uninstall, executable symlinks | Install and execute fixture packages; validate dependency order, basename mapping, executable modes, package-supplied wrappers, uninstall, checksum failures, and archive containment. Verify rejection of aliases, fixed-argument entries, duplicate basenames, and the reserved command name. Invoke the same executables directly and through Bash, Zsh, and Fish. Verify that externally stored XDG data survives uninstall. |
-| 3 | Update/reset/hold, cleanup, locking, recovery, bootstrap and self-update | Exercise upgrades and retained-version switching; verify held-package behavior against upstream; inject failures around activation; validate concurrent mutations and a two-release self-update. |
+| 2 | Cache, downloads, extraction, dependencies, install/uninstall, executable symlinks | Install and execute fixture packages; validate dependency order, basename mapping, executable modes, package-supplied wrappers, uninstall, checksum failures, and archive containment. Verify rejection of aliases, fixed-argument entries, duplicate basenames, and unsafe paths. Invoke the same executables directly and through Bash, Zsh, and Fish. Verify that externally stored XDG data survives uninstall. |
+| 3 | Update/reset/hold, cleanup, locking, recovery, Scoop package upgrades | Exercise upgrades and retained-version switching; verify held-package behavior against upstream; inject failures around activation; validate concurrent mutations and a two-release Scoop package upgrade. |
 | 4 | Scoopfile operations, diagnostics, Linux main bucket, release packaging | Recreate an installation from export, pass clean-machine lifecycle runs covering both validation architectures and distributions, and verify all scoped commands/options. |
 
 Maintain a compatibility checklist keyed to each reference command and option. Derive behavioral fixtures from `../Scoop/test` and command implementations; use them for Linux state transitions and data formats. Where platform-neutral behavior is ambiguous, compare with the pinned reference on Windows before declaring parity.

@@ -29,24 +29,10 @@ pub fn refresh_due(config: &Config) -> bool {
         .and_then(date)
         .is_none_or(|last| Utc::now().signed_duration_since(last).num_seconds() >= 3 * 3600)
 }
-pub fn core_held(config: &Config) -> Result<bool> {
-    if let Some(value) = config.values.get("hold_update_until") {
-        if value
-            .as_str()
-            .and_then(date)
-            .is_some_and(|until| until > Utc::now())
-        {
-            eprintln!("Scoop self-update is held until {value}.");
-            return Ok(true);
-        }
-        config.set("hold_update_until", serde_json::Value::Null)?;
-    }
-    Ok(false)
-}
 pub fn automatic(config: &Config, disabled: bool) -> Result<()> {
-    if refresh_due(config) || std::env::var_os("SCOOP_INTERNAL_REFRESH_CONTINUE").is_some() {
+    if refresh_due(config) {
         if disabled {
-            eprintln!("Scoop refresh is due (--no-update-scoop).");
+            eprintln!("Bucket refresh is due (--no-update).");
         } else if let Err(error) = refresh(config) {
             eprintln!("warning: automatic refresh failed: {error:#}");
         }
@@ -54,22 +40,9 @@ pub fn automatic(config: &Config, disabled: bool) -> Result<()> {
     Ok(())
 }
 pub fn refresh(config: &Config) -> Result<()> {
-    // Record the attempt before network I/O, including failures and executable handoff.
+    // Record the attempt before network I/O to bound retries after failures.
     config.set("last_update", Utc::now().to_rfc3339().into())?;
     let mut failures = Vec::new();
-    let core = (|| -> Result<()> {
-        if !core_held(config)?
-            && std::env::var_os("SCOOP_INTERNAL_REFRESH_CONTINUE").is_none()
-            && let Some(binary) = crate::self_update::update(config)?
-        {
-            crate::self_update::handoff(&binary)?;
-        }
-        Ok(())
-    })();
-    if let Err(error) = core {
-        eprintln!("warning: Scoop refresh failed: {error:#}");
-        failures.push("scoop".to_owned());
-    }
     let buckets = crate::buckets::Buckets::new(&config.root);
     for name in buckets.names()? {
         let result = (|| -> Result<()> {
@@ -128,28 +101,15 @@ pub fn hold(config: &Config, apps: &[String], held: bool) -> Result<()> {
     each(apps.to_vec(), |operand| {
         let app = state::operand_name(operand)?;
         journal::ensure_clear(config, app)?;
-        if app == "scoop" {
-            config.set(
-                "hold_update_until",
-                if held {
-                    (Utc::now() + chrono::Duration::days(1)).to_rfc3339().into()
-                } else {
-                    serde_json::Value::Null
-                },
-            )?;
-        } else {
-            let (dir, mut record) =
-                state::current(config, app)?.context("package is not installed")?;
-            record.hold = held;
-            config::atomic_json(&dir.join("scoop-install.json"), &record)?;
-        }
+        let (dir, mut record) = state::current(config, app)?.context("package is not installed")?;
+        record.hold = held;
+        config::atomic_json(&dir.join("scoop-install.json"), &record)?;
         println!("{app} is {}.", if held { "held" } else { "unheld" });
         Ok(())
     })
 }
 pub fn activate_retained_locked(config: &Config, app: &str, version: &str) -> Result<()> {
     journal::ensure_clear(config, app)?;
-    ensure!(app != "scoop", "reset scoop is reserved for self-update");
     state::version_name(version)?;
     let previous = state::current(config, app)?.context("package is not installed")?;
     platform::select(
@@ -198,7 +158,6 @@ pub fn reset(config: &Config, apps: &[String], all: bool) -> Result<()> {
         let (input, requested) = resolve::split_version(operand)?;
         let app = state::operand_name(input)?;
         journal::ensure_clear(config, app)?;
-        ensure!(app != "scoop", "reset scoop is reserved for self-update");
         let (current, _) = state::current(config, app)?.context("package is not installed")?;
         let version = requested.unwrap_or(
             current
@@ -217,9 +176,6 @@ fn outdated(config: &Config, old: &str, new: &str) -> bool {
 }
 pub fn status(config: &Config, local: bool) -> Result<()> {
     if !local {
-        if let Err(error) = crate::self_update::check(config) {
-            eprintln!("warning: Scoop update check failed; using local state: {error:#}");
-        }
         let buckets = crate::buckets::Buckets::new(&config.root);
         for name in buckets.names()? {
             let result = (|| -> Result<()> {
@@ -282,9 +238,7 @@ pub fn update(config: &Config, options: &Update) -> Result<()> {
         ensure!(!options.no_cache, "--no-cache requires an app or --all");
         return refresh(config);
     }
-    if (options.apps.iter().any(|app| app == "scoop")
-        || refresh_due(config)
-        || std::env::var_os("SCOOP_INTERNAL_REFRESH_CONTINUE").is_some())
+    if refresh_due(config)
         && let Err(error) = refresh(config)
     {
         eprintln!("warning: refresh failed; updating packages from local manifests: {error:#}");
@@ -292,9 +246,6 @@ pub fn update(config: &Config, options: &Update) -> Result<()> {
     let arch = platform::select(None, config.architecture(), &platform::host()?, true)?;
     let operands = selected(config, &options.apps, options.all)?;
     each(operands, |operand| {
-        if operand == "scoop" {
-            return Ok(());
-        }
         let (input, _) = resolve::split_version(operand)?;
         let app = state::operand_name(input)?;
         journal::check(config, app)?;

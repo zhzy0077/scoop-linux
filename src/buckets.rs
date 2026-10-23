@@ -112,7 +112,26 @@ impl Buckets {
         ensure!(matches.len() <= 1, "ambiguous manifest '{bucket}/{app}'");
         Ok(matches.into_iter().next())
     }
+    pub fn initialize(config: &config::Config) -> Result<()> {
+        if config.root.join(".bucket-sources.json").exists() {
+            return Ok(());
+        }
+        let source = std::env::var("SCOOP_MAIN_BUCKET")
+            .ok()
+            .filter(|source| !source.is_empty())
+            .or_else(|| {
+                config
+                    .values
+                    .get("main_bucket_url")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            });
+        Self::new(&config.root).add_inner("main", source.as_deref(), true)
+    }
     pub fn add(&self, name: &str, source: Option<&str>) -> Result<()> {
+        self.add_inner(name, source, false)
+    }
+    fn add_inner(&self, name: &str, source: Option<&str>, initial: bool) -> Result<()> {
         ensure!(
             !name.starts_with('.'),
             "bucket names must not start with '.'"
@@ -127,6 +146,9 @@ impl Buckets {
         ensure!(!source.starts_with('-'), "invalid bucket repository");
         let root = self.root.parent().context("bucket root")?;
         let _lock = config::mutation_lock(root)?;
+        if initial && root.join(".bucket-sources.json").exists() {
+            return Ok(());
+        }
         ensure!(
             fs::symlink_metadata(&destination)
                 .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
@@ -169,7 +191,7 @@ impl Buckets {
             config::atomic_json(&registry_path, &original)?;
             return Err(error.into());
         }
-        println!("Bucket '{name}' added ({source}).");
+        eprintln!("Bucket '{name}' added ({source}).");
         Ok(())
     }
     pub fn remove(&self, name: &str) -> Result<()> {

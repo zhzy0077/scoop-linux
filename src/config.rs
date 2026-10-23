@@ -33,7 +33,6 @@ impl Config {
             "root_path",
             "cache_path",
             "default_architecture",
-            "release_catalog",
             "main_bucket_url",
         ] {
             ensure!(

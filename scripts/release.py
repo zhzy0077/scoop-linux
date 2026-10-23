@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare native GitHub release assets consumed by Scoop's self-updater."""
+"""Prepare native GitHub release assets and a regular Scoop package manifest."""
 import hashlib
 import json
 import os
@@ -19,6 +19,29 @@ TARGETS = {
 def checksum(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def package_manifest(version, base, targets):
+    return {
+        "version": version,
+        "description": "User-scoped Linux package manager",
+        "homepage": base,
+        "license": "Unknown",
+        "architecture": {
+            entry["architecture"]: {"url": entry["url"] + "#/scoop", "hash": entry["sha256"]}
+            for entry in targets.values()
+        },
+        "bin": "scoop",
+        "notes": "Requires glibc 2.39 or newer and libgcc_s.so.1.",
+        "checkver": {"github": base, "regex": r"^(?=(?<tag>.*)$)v?(\d+(?:\.\d+)*)$"},
+        "autoupdate": {
+            "architecture": {
+                arch: {"url": f"{base}/releases/download/$matchTag/scoop-{target}#/scoop"}
+                for target, (arch, _) in TARGETS.items()
+            },
+            "hash": {"url": "$baseurl/SHA256SUMS"},
+        },
+    }
 
 
 def main():
@@ -47,6 +70,8 @@ def main():
         symbols = subprocess.check_output(["readelf", "--version-info", str(binary)], text=True)
         versions = re.findall(r"GLIBC_([0-9]+(?:\.[0-9]+)+)", symbols)
         minimum = max(versions, key=lambda value: tuple(map(int, value.split('.'))))
+        if tuple(map(int, minimum.split("."))) > (2, 39):
+            raise SystemExit(f"Release requires glibc {minimum}; supported baseline is 2.39")
         name = f"scoop-{target}"
         artifact = dist / name
         shutil.copy2(binary, artifact)
@@ -57,16 +82,17 @@ def main():
             "url": f"{base}/releases/download/{tag}/{name}", "sha256": checksum(artifact),
         }
         (dist / f"{target}.json").write_text(json.dumps(metadata, indent=2) + '\n')
-    elif command == "catalog":
+    elif command == "manifest":
         targets = {}
         for target in TARGETS:
             metadata = json.loads((dist / f"{target}.json").read_text())
             if checksum(dist / f"scoop-{target}") != metadata["sha256"]:
                 raise SystemExit(f"Checksum mismatch for {target}")
             targets[target] = metadata
-        catalog = {"format_version": 1, "version": version, "targets": targets}
-        (dist / "release-catalog.json").write_text(json.dumps(catalog, indent=2) + '\n')
-        assets = sorted(dist.glob("scoop-*")) + [dist / "release-catalog.json"]
+        base = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
+        manifest = package_manifest(version, base, targets)
+        (dist / "scoop.json").write_text(json.dumps(manifest, indent=2) + '\n')
+        assets = sorted(dist.glob("scoop-*")) + [dist / "scoop.json"]
         (dist / "SHA256SUMS").write_text(''.join(f"{checksum(p)}  {p.name}\n" for p in assets))
     else:
         raise SystemExit(f"Unknown command: {command}")

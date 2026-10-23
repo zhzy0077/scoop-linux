@@ -28,6 +28,22 @@ pub fn run(command: Command) -> Result<()> {
     }
     let mut config = Config::load()?;
     crate::journal::recover(&config)?;
+    if matches!(
+        &command,
+        Command::Search { .. }
+            | Command::Info { .. }
+            | Command::Cat { .. }
+            | Command::Depends { .. }
+            | Command::Install(_)
+            | Command::Download(_)
+            | Command::Update(_)
+            | Command::Status { local: false }
+            | Command::Bucket {
+                command: crate::cli::BucketCommand::List
+            }
+    ) {
+        Buckets::initialize(&config)?;
+    }
     let resolver = Resolver::new(&config);
     match command {
         Command::Config { args } => config.command(&args),
@@ -133,7 +149,7 @@ pub fn run(command: Command) -> Result<()> {
                 &platform::host()?,
                 true,
             )?;
-            crate::maintenance::automatic(&config, options.no_update_scoop)?;
+            crate::maintenance::automatic(&config, options.no_update)?;
             crate::lifecycle::install(
                 &config,
                 &options.apps,
@@ -153,7 +169,7 @@ pub fn run(command: Command) -> Result<()> {
                 &platform::host()?,
                 false,
             )?;
-            crate::maintenance::automatic(&config, options.no_update_scoop)?;
+            crate::maintenance::automatic(&config, options.no_update)?;
             crate::lifecycle::download(
                 &config,
                 &options.apps,

@@ -64,7 +64,6 @@ fn validate_bins(bins: &[String]) -> Result<()> {
             .file_name()
             .and_then(|s| s.to_str())
             .context("bin needs an executable basename")?;
-        ensure!(base != "scoop", "bin basename 'scoop' is reserved");
         ensure!(names.insert(base), "duplicate bin basename '{base}'");
         ensure!(
             !bin.ends_with('/') && base != ".",
