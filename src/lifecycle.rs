@@ -19,7 +19,6 @@ pub fn plan(
     operand: &str,
     arch: &str,
     independent: bool,
-    skip_hash: bool,
 ) -> Result<Vec<Planned>> {
     #[derive(Default)]
     struct Traversal {
@@ -32,7 +31,6 @@ pub fn plan(
         operand: &str,
         arch: &str,
         independent: bool,
-        skip: bool,
         traversal: &mut Traversal,
     ) -> Result<()> {
         let resolved = resolver.resolve(operand)?;
@@ -46,7 +44,7 @@ pub fn plan(
             return Ok(());
         }
         state::version_name(resolved.manifest.version())?;
-        let target = resolved.manifest.target(arch, skip)?;
+        let target = resolved.manifest.target(arch)?;
         // Validate download names and format support before any mutation or network artifact fetch.
         for artifact in &target.artifacts {
             let filename = download::filename(&artifact.url)?;
@@ -60,7 +58,7 @@ pub fn plan(
         traversal.active.push(name.clone());
         if !independent {
             for dependency in &target.dependencies {
-                visit(resolver, dependency, arch, false, skip, traversal)?;
+                visit(resolver, dependency, arch, false, traversal)?;
             }
         }
         traversal.active.pop();
@@ -69,14 +67,7 @@ pub fn plan(
         Ok(())
     }
     let mut traversal = Traversal::default();
-    visit(
-        resolver,
-        operand,
-        arch,
-        independent,
-        skip_hash,
-        &mut traversal,
-    )?;
+    visit(resolver, operand, arch, independent, &mut traversal)?;
     Ok(traversal.out)
 }
 pub(crate) fn prepare_layout(config: &Config) -> Result<()> {
@@ -343,7 +334,7 @@ pub fn install(
                     return Ok(());
                 }
             }
-            let planned = plan(&resolver, operand, arch, independent, options.skip_hash)?;
+            let planned = plan(&resolver, operand, arch, independent)?;
             let requested = planned
                 .last()
                 .context("package missing")?
@@ -452,7 +443,7 @@ pub fn download(
     let mut failures = Vec::new();
     for operand in apps {
         let result: Result<()> = (|| {
-            let mut planned = plan(&resolver, operand, arch, true, options.skip_hash)?;
+            let mut planned = plan(&resolver, operand, arch, true)?;
             let package = planned.pop().context("package missing")?;
             let _lock = config::mutation_lock(&config.root)?;
             crate::journal::recover_locked(config)?;

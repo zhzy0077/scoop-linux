@@ -52,11 +52,16 @@ fn verify_labeled(
     description: &str,
 ) -> Result<()> {
     if !skip {
-        let expected = expected.context("SHA-256 checksum required")?;
-        ensure!(
-            digest(path)? == expected.to_ascii_lowercase(),
-            "SHA-256 checksum mismatch for {description}"
-        );
+        match expected {
+            Some(expected) => ensure!(
+                digest(path)? == expected.to_ascii_lowercase(),
+                "SHA-256 checksum mismatch for {description}"
+            ),
+            None => eprintln!(
+                "warning: no hash in manifest; SHA-256 of {description}: {}",
+                digest(path)?
+            ),
+        }
     }
     Ok(())
 }
@@ -140,7 +145,7 @@ pub fn fetch(
         );
         let mut file = fs::File::open(&cache)?;
         let valid = options.skip_hash
-            || artifact.hash.as_deref().is_some_and(|expected| {
+            || artifact.hash.as_deref().is_none_or(|expected| {
                 digest_reader(&mut file).is_ok_and(|actual| actual == expected.to_ascii_lowercase())
             });
         if valid {

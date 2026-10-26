@@ -118,7 +118,7 @@ pub fn run(command: Command) -> Result<()> {
                 println!("Provenance:  {}", resolved.source.provenance());
                 let arch =
                     platform::select(None, config.architecture(), &platform::host()?, false)?;
-                let target = match resolved.manifest.target(&arch, true) {
+                let target = match resolved.manifest.target(&arch) {
                     Ok(target) => target,
                     Err(error) => {
                         println!("Availability: {error}");
@@ -196,7 +196,7 @@ pub fn run(command: Command) -> Result<()> {
                 false,
             )?;
             println!("Source\tName");
-            for package in crate::lifecycle::plan(&resolver, &app, &arch, false, true)? {
+            for package in crate::lifecycle::plan(&resolver, &app, &arch, false)? {
                 println!("{}\t{}", package.resolved.source, package.resolved.name);
             }
             Ok(())

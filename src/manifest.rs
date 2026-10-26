@@ -218,7 +218,7 @@ impl Manifest {
     pub fn version(&self) -> &str {
         self.value["version"].as_str().expect("validated version")
     }
-    pub fn target(&self, arch: &str, skip_hash: bool) -> Result<Target> {
+    pub fn target(&self, arch: &str) -> Result<Target> {
         ensure!(
             self.version() != "nightly",
             "unsupported manifest feature: nightly execution"
@@ -241,10 +241,6 @@ impl Manifest {
         ensure!(
             hashes.is_empty() || hashes.len() == urls.len(),
             "URL/hash count mismatch"
-        );
-        ensure!(
-            skip_hash || hashes.len() == urls.len(),
-            "a SHA-256 checksum is required for every download"
         );
         let dirs = strings(field("extract_dir"));
         let destinations = strings(self.value.get("extract_to"));

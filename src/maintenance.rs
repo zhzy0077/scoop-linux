@@ -133,7 +133,7 @@ pub fn activate_retained_locked(config: &Config, app: &str, version: &str) -> Re
         manifest.version() == version,
         "retained manifest/version mismatch"
     );
-    let target = manifest.target(&record.architecture, true)?;
+    let target = manifest.target(&record.architecture)?;
     ensure!(
         target.bins == record.bins,
         "retained manifest/bin record mismatch"
@@ -274,13 +274,7 @@ pub fn update(config: &Config, options: &Update) -> Result<()> {
             return Ok(());
         }
         let resolver = Resolver::new(config);
-        let planned = lifecycle::plan(
-            &resolver,
-            operand,
-            &arch,
-            options.independent,
-            options.skip_hash_check,
-        )?;
+        let planned = lifecycle::plan(&resolver, operand, &arch, options.independent)?;
         let requested = planned.last().context("package plan")?;
         let old = current
             .file_name()

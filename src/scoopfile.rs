@@ -306,7 +306,7 @@ pub fn import(config: &Config, location: &str) -> Result<()> {
                         source.to_owned()
                     };
                     let planned =
-                        lifecycle::plan(&Resolver::new(config), &operand, &selected, false, false)?;
+                        lifecycle::plan(&Resolver::new(config), &operand, &selected, false)?;
                     ensure!(
                         planned.last().is_some_and(|p| p.resolved.name == name),
                         "app name/source mismatch for {name}"
