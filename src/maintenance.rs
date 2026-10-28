@@ -134,10 +134,6 @@ pub fn activate_retained_locked(config: &Config, app: &str, version: &str) -> Re
         "retained manifest/version mismatch"
     );
     let target = manifest.target(&record.architecture)?;
-    ensure!(
-        target.bins == record.bins,
-        "retained manifest/bin record mismatch"
-    );
     lifecycle::validate_binaries(&dir, &manifest, &target)?;
     journal::activate(
         config,

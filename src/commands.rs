@@ -219,12 +219,7 @@ pub fn run(command: Command) -> Result<()> {
                             .as_deref()
                             .or(record.url.as_deref())
                             .unwrap_or(""),
-                        chrono::DateTime::<chrono::Utc>::from_timestamp(
-                            i64::try_from(record.installed_at).unwrap_or(i64::MAX),
-                            0
-                        )
-                        .map(|date| date.to_rfc3339())
-                        .unwrap_or_else(|| "<invalid timestamp>".into()),
+                        crate::state::updated(&dir)?.to_rfc3339(),
                         if record.hold { "Held package" } else { "" }
                     );
                 }

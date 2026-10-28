@@ -8,65 +8,44 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
-    pub format_version: u32,
     pub architecture: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bucket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-    pub bucket_commit: Option<String>,
-    #[serde(default)]
-    pub bucket_dirty: bool,
-    pub manifest_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hold: bool,
-    pub installed_at: u64,
+    #[serde(skip)]
     pub bins: Vec<Binary>,
 }
 impl Record {
     pub fn new(resolved: &Resolved, architecture: &str, bins: Vec<Binary>) -> Self {
-        let (bucket, url, commit, path) = match &resolved.source {
-            Source::Bucket {
-                name, commit, path, ..
-            } => (
-                Some(name.clone()),
-                None,
-                Some(commit.clone()),
-                Some(path.clone()),
-            ),
+        let (bucket, url) = match &resolved.source {
+            Source::Bucket { name, .. } => (Some(name.clone()), None),
             Source::File(p) | Source::Installed(p) => {
-                (None, Some(p.to_string_lossy().into_owned()), None, None)
+                (None, Some(p.to_string_lossy().into_owned()))
             }
-            Source::Url(url) => (None, Some(url.clone()), None, None),
+            Source::Url(url) => (None, Some(url.clone())),
         };
         Self {
-            format_version: 2,
             architecture: architecture.into(),
             bucket,
             url,
-            bucket_commit: commit,
-            bucket_dirty: matches!(&resolved.source, Source::Bucket { dirty: true, .. }),
-            manifest_path: path,
             hold: false,
-            installed_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
             bins,
         }
     }
     pub fn load(dir: &Path) -> Result<Self> {
         let path = dir.join("scoop-install.json");
-        let record: Self = serde_json::from_slice(
+        let mut record: Self = serde_json::from_slice(
             &fs::read(&path)
                 .with_context(|| format!("read installation record {}", path.display()))?,
         )
         .with_context(|| format!("invalid installation record {}", path.display()))?;
-        ensure!(
-            record.format_version == 2,
-            "unsupported installation record format"
-        );
+        record.bins = saved_manifest(dir)?.target(&record.architecture)?.bins;
         let mut commands = std::collections::HashSet::new();
         for bin in &record.bins {
             bin.validate()?;
@@ -77,6 +56,11 @@ impl Record {
         }
         Ok(record)
     }
+}
+pub fn updated(dir: &Path) -> Result<chrono::DateTime<chrono::Utc>> {
+    Ok(fs::metadata(dir.join("scoop-install.json"))?
+        .modified()?
+        .into())
 }
 pub fn managed_dir(path: &Path) -> Result<()> {
     match fs::symlink_metadata(path) {
@@ -212,4 +196,32 @@ pub fn saved_manifest(dir: &Path) -> Result<Manifest> {
             .with_context(|| format!("read installed manifest {}", path.display()))?,
     )
     .with_context(|| format!("invalid installed manifest {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loads_bins_from_saved_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("scoop-manifest.json"), r#"{"version":"1.0","homepage":"https://example.com","license":"MIT","url":"https://example.com/app.tar.gz","bin":[["bin/tool","alias"]]}"#).unwrap();
+        fs::write(
+            dir.path().join("scoop-install.json"),
+            r#"{"architecture":"64bit","bucket":"main"}"#,
+        )
+        .unwrap();
+        let record = Record::load(dir.path()).unwrap();
+        assert_eq!(
+            record.bins,
+            vec![Binary {
+                path: "bin/tool".into(),
+                name: "alias".into()
+            }]
+        );
+        assert_eq!(
+            serde_json::to_value(record).unwrap(),
+            serde_json::json!({"architecture":"64bit","bucket":"main"})
+        );
+    }
 }

@@ -113,12 +113,7 @@ pub fn export(config: &Config, include_config: bool) -> Result<Export> {
                 .file_name()
                 .and_then(|s| s.to_str())
                 .context("version name")?;
-            let updated = chrono::DateTime::<chrono::Utc>::from_timestamp(
-                i64::try_from(record.installed_at)?,
-                0,
-            )
-            .context("invalid installation timestamp")?
-            .to_rfc3339();
+            let updated = state::updated(&dir)?.to_rfc3339();
             let mut info = vec![record.architecture.clone()];
             if record.hold {
                 info.push("Held package".into())
