@@ -217,25 +217,32 @@ pub fn status(config: &Config, local: bool) -> Result<()> {
                         })
                         .collect();
                 if outdated(config, old, new) || record.hold || !missing.is_empty() {
-                    rows.push(format!(
-                        "{app}\t{old}\t{new}\t{}{}",
-                        if record.hold { "Held package" } else { "" },
-                        if missing.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" Missing dependencies: {}", missing.join(", "))
-                        }
-                    ));
+                    let mut info = Vec::new();
+                    if record.hold {
+                        info.push("Held package".to_owned());
+                    }
+                    if !missing.is_empty() {
+                        info.push(format!("Missing dependencies: {}", missing.join(", ")));
+                    }
+                    rows.push((app, old.to_owned(), new.to_owned(), info.join("; ")));
                 }
             }
-            Err(error) => rows.push(format!("{app}\t{old}\t?\tManifest unavailable: {error}")),
+            Err(error) => rows.push((
+                app,
+                old.to_owned(),
+                "?".into(),
+                format!("Manifest unavailable: {error}"),
+            )),
         }
     }
     if !rows.is_empty() {
-        println!("Name\tInstalled Version\tLatest Version\tInfo");
-        for row in rows {
-            println!("{row}");
+        let mut table = comfy_table::Table::new();
+        table.load_style(comfy_table::presets::NOTHING);
+        table.set_header(["Name", "Installed Version", "Latest Version", "Info"]);
+        for (name, old, new, info) in rows {
+            table.add_row([name, old, new, info]);
         }
+        println!("{table}");
     } else if !needs_attention {
         println!("Everything is ok!");
     }
