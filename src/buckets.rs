@@ -168,7 +168,8 @@ impl Buckets {
             .args(["clone", "--", source])
             .arg(&clone)
             .env("GIT_TERMINAL_PROMPT", "0")
-            .output()?;
+            .output()
+            .context("Git is required to fetch buckets (is git installed and on PATH?)")?;
         ensure!(
             status.status.success(),
             "git clone: {}",
