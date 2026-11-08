@@ -179,7 +179,7 @@ pub fn fetch(
         }
         "http" | "https" => {
             let client = crate::network::client(300)?;
-            let mut request = client.get(url);
+            let mut request = crate::network::asset_request(&client, url);
             if let Some(cookies) = manifest.value.get("cookie").and_then(|v| v.as_object()) {
                 let mut values = Vec::new();
                 for (key, value) in cookies {
